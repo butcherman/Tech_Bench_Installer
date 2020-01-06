@@ -17,6 +17,12 @@ PREREQ=true
 #  Include Files
 source function/dependency_functions.sh
 
+#  Verify the script is being run as root
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root"  | tee $LOGFILE
+   exit 1
+fi
+
 ###  Start installation process  ###
 clear
 tput setaf 4
@@ -62,6 +68,7 @@ while true; do
 done
 
 ###  Setup the Tech Bench  ###
+cd $RootDir
 echo 'Setting up Tech Bench.  Please wait...'
 spin & 
 SPIN_PID=$!
@@ -73,9 +80,9 @@ writeEnv
 
 #  Download all composer dependencies and generate new encryption key
 echo 'Downloading Additional Files...'
-cd $RootDir
-composer install --no-interaction --no-dev --optimize-autoloader
-php artisan key:generate
+
+su -c "composer install --optimize-autoloader --no-dev --no-interaction" $SUDO_USER
+su -c "php artisan key:generate" $SUDO_USER
 
 #  Setup the database
 echo 'Setting Up Database...'
@@ -87,10 +94,10 @@ if [[ $ExistingDB =~ ^[Nn]$ ]]; then
         FLUSH PRIVILEGES;
     MYSQL_SCRIPT
 fi
-php artisan migrate --force
+su -c "php artisan migrate --force" $SUDO_USER
 
 echo 'Almost Done...'
-php artisan storage:link
+su -c "php artisan storage:link" $SUDO_USER
 
 ##  Show Finished Message  ##
 clear
@@ -116,6 +123,3 @@ echo 'More information can be found in the log file'
 
 
 exit 1
-
-
-

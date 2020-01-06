@@ -8,8 +8,8 @@
 #  Log File Location
 LOGFILE=install.log
 #  Minimum PHP Version Required to run Tech Bench
-minimumPHPVer=73;
-minimumPHPReadable=7.3
+minimumPHPVer=72;
+minimumPHPReadable=7.2
 
 #  Variables
 PREREQ=true
@@ -52,7 +52,7 @@ printf '\nLooking Good - lets move on...\n\n' | tee -a $LOGFILE
 
 ###  Gather Information for the Install  ###
 #  Install variables
-CurDir=$pwd
+CurDir=`pwd`
 
 #  Root directory where PHP files are served from
 read -p 'What is the Web Server Root Directory where the Tech Bench files are loaded to? ['$CurDir']:  ' RootDir
@@ -74,16 +74,16 @@ DBName=${DBName:-techbench}
 #  If the user wants to use the 'root' database user, present warning that this is insecure
 while true; do
 	read -p 'Please enter the name of the database user:  ' DBUser
-	read -p 'Please enter the password of the database user:  ' DBPass
+	read -p 'Please enter the password of the database user:  ' -s DBPass
 
-	if [[ $DBUser -ne 'root' ]]; then
+	if [[ $DBUser != 'root' ]]; then
 		break
 	fi
 
 	printf '\n\n Using the "root" database user can be very insecure.'
 	read -p 'Are you sure you want to continue with this database user? [y/n]'  cont  
 
-	if [[ $cont =~ ^[Yy]$ ]]
+	if [[ $cont =~ ^[Yy]$ ]]; then
 		break
 	fi
 done

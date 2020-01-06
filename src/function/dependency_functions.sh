@@ -181,7 +181,7 @@ writeEnv()
     echo 'DB_PORT=3306' >> .env
     echo "DB_DATABASE=\"$DBName\"" 																	 >> .env
     echo "DB_USERNAME=\"$DBUser\"" 																 >> .env
-    echo "DB_PASSWORD=\"$DBPass\""
+    echo "DB_PASSWORD=\"$DBPass\"" >> .env
     echo '' >> .env
     echo '#  By default application files are stored int he WebRoot/storage/app directory' >> .env
     echo '#  To change this location, uncomment the lines below and modify as needed' >> .env

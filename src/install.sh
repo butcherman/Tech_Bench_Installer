@@ -62,7 +62,8 @@ while true; do
 	echo 'Tech Bench URL:             ' $WebURL
 	echo 'Database Name               ' $DBName
 	echo 'Database User               ' $DBUser
-	echo 'Database Password           <redacted>'
+	echo 'Database Password            <redacted>'
+	printf '\n'
 	read -p 'Would you like to continue? [y/n]'  doInstall  
 
 	if [[ $doInstall =~ ^[Yy]$ ]]; then
@@ -71,41 +72,48 @@ while true; do
 done
 
 ###  Setup the Tech Bench  ###
-chmod -R -777 $RootDir #  Temporarily allow full write access so script can download composer files
+chmod -R 777 $RootDir #  Temporarily allow full write access so script can download composer files
 cd $RootDir
 echo 'Setting up Tech Bench.  Please wait...'
-spin & 
-SPIN_PID=$!
-trap "kill -9 $SPIN_PID" `seq 0 15`
 
 #  Create the .env configuration file
-echo 'Writing Configuration File...'
-writeEnv
+# echo 'Writing Configuration File...'
+# writeEnv
 
-#  Download all composer dependencies and generate new encryption key
-echo 'Downloading Additional Files...'
+# #  Download all composer dependencies and generate new encryption key
+# echo 'Downloading Additional Files...'
 
-su -c "composer install --optimize-autoloader --no-dev --no-interaction" $SUDO_USER
-su -c "php artisan key:generate" $SUDO_USER
+# su -c "composer install --optimize-autoloader --no-dev --no-interaction" $SUDO_USER
+# su -c "php artisan key:generate" $SUDO_USER
+# exit 1
+
+
+
+
 
 #  Setup the database
 echo 'Setting Up Database...'
 if [[ $ExistingDB =~ ^[Nn]$ ]]; then
-    mysql -u$DBUser -p$DBPass 
-        CREATE DATABASE IF NOT EXISTS \`${DBName}\`;
-        GRANT ALL PRIVILEGES ON \`${DBName}\`.* TO '${DBUser}'@'localhost' WITH GRANT OPTION;
-        GRANT SELECT ON INFORMATION_SCHEMA TO '${SBUser}'@'localhost';
-        FLUSH PRIVILEGES;
-    MYSQL_SCRIPT
+    mysql -u$DBUser -p$DBPass  
+		# MYSQL_SCRIPT
+			mysql -e "CREATE DATABASE IF NOT EXISTS \`${DBName}\`;"
+			mysql -e "GRANT ALL PRIVILEGES ON \`${DBName}\`.* TO '${DBUser}'@'localhost' WITH GRANT OPTION;"
+			mysql -e "GRANT SELECT ON INFORMATION_SCHEMA TO '${SBUser}'@'localhost';"
+			mysql -e "FLUSH PRIVILEGES;"
+		# MYSQL_SCRIPT
 fi
 su -c "php artisan migrate --force" $SUDO_USER
 
+
+
+# Finish the install
+exit 1
 echo 'Almost Done...'
 chmod -R 755 $RootDir
 su -c "php artisan storage:link" $SUDO_USER
 
 ##  Show Finished Message  ##
-clear
+# clear
 tput setaf 4
 echo '##################################################################'
 echo '#                                                                #'

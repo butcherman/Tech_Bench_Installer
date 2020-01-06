@@ -43,6 +43,9 @@ checkPHP
 # checkApacheRewrite
 checkComposer
 
+## TODO - Check for Apache Rewrite Module
+## TODO - Check for php DOM extension (sudo apt-get install php-xml)
+
 #  Check if all prerequesits have passed or not.  If a prereq fails, exit script
 if test $PREREQ = false; then
 	printf '\n\nOne or more prerequesits has failed.\nPlease install the missing prerequesits and run this installer again.\n\n' | tee -a $LOGFILE
@@ -68,6 +71,7 @@ while true; do
 done
 
 ###  Setup the Tech Bench  ###
+chmod -R -777 $RootDir #  Temporarily allow full write access so script can download composer files
 cd $RootDir
 echo 'Setting up Tech Bench.  Please wait...'
 spin & 
@@ -97,6 +101,7 @@ fi
 su -c "php artisan migrate --force" $SUDO_USER
 
 echo 'Almost Done...'
+chmod -R 755 $RootDir
 su -c "php artisan storage:link" $SUDO_USER
 
 ##  Show Finished Message  ##

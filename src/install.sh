@@ -72,36 +72,35 @@ while true; do
 done
 
 ###  Setup the Tech Bench  ###
+echo 'Setting up Tech Bench.  Please wait...'
 chmod -R 777 $RootDir #  Temporarily allow full write access so script can download composer files
 cd $RootDir
-echo 'Setting up Tech Bench.  Please wait...'
+if [[ $ExistingDB =~ ^[Nn]$ ]]; then
+    # mysql -u$DBUser -p$DBPass  
+	mysql -u$DBUser -p$DBPass -e "CREATE DATABASE IF NOT EXISTS \`${DBName}\`;"
+	mysql -u$DBUser -p$DBPass -e "GRANT ALL PRIVILEGES ON \`${DBName}\`.* TO '${DBUser}'@'localhost' WITH GRANT OPTION;"
+	mysql -u$DBUser -p$DBPass -e "GRANT SELECT ON INFORMATION_SCHEMA TO '${SBUser}'@'localhost';"
+	mysql -u$DBUser -p$DBPass -e "FLUSH PRIVILEGES;"
+fi
+
+#  TODO - Testing Here
+
+
+exit
+
+
 
 #  Create the .env configuration file
-# echo 'Writing Configuration File...'
-# writeEnv
+echo 'Writing Configuration File...'
+writeEnv
 
-# #  Download all composer dependencies and generate new encryption key
-# echo 'Downloading Additional Files...'
-
-# su -c "composer install --optimize-autoloader --no-dev --no-interaction" $SUDO_USER
-# su -c "php artisan key:generate" $SUDO_USER
-# exit 1
-
-
-
-
+#  Download all composer dependencies and generate new encryption key
+echo 'Downloading Additional Files...'
+su -c "composer install --optimize-autoloader --no-dev --no-interaction" $SUDO_USER
+su -c "php artisan key:generate" $SUDO_USER# exit 1
 
 #  Setup the database
 echo 'Setting Up Database...'
-if [[ $ExistingDB =~ ^[Nn]$ ]]; then
-    mysql -u$DBUser -p$DBPass  
-		# MYSQL_SCRIPT
-			mysql -e "CREATE DATABASE IF NOT EXISTS \`${DBName}\`;"
-			mysql -e "GRANT ALL PRIVILEGES ON \`${DBName}\`.* TO '${DBUser}'@'localhost' WITH GRANT OPTION;"
-			mysql -e "GRANT SELECT ON INFORMATION_SCHEMA TO '${SBUser}'@'localhost';"
-			mysql -e "FLUSH PRIVILEGES;"
-		# MYSQL_SCRIPT
-fi
 su -c "php artisan migrate --force" $SUDO_USER
 
 

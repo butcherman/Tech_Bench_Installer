@@ -15,6 +15,16 @@ minimumPHPReadable=7.2
 PREREQ=true
 MANUAL=false
 
+#  File Locations
+WEBROOT=\/var\/www\/html
+
+#  Install Data Variables
+WebURL=localhost.com
+SSLOnly=true
+DBName=tech-bench
+DBUser=tbUser
+DBPass=null
+
 #  Verify the script is being run as root
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"  | tee $LOGFILE
@@ -47,14 +57,63 @@ main()
 	echo '##################################################################' | tee -a $LOGFILE
 	echo '' | tee -a $LOGFILE
 	tput sgr0
-	printf 'Checking Dependencies...\n\n' | tee -a $LOGFILE
+	
+	printf 'Before we get started, lets gather some information from you'
 
+	#  Get the full URL of the Tech Bench site
+	printf '\n\nPlease enter the full url that will be used for the Tech Bench: \n'
+	printf '(ex. techbench.domain.com)\n' 
+	read -p "Enter URL [$WebURL]:  " WebURL
+	echo ''
+	read -p 'Use HTTPS for Tech Bench Access (Recommended) [y/n]: ' SSLOnly
+	if [[ $SSLOnly =~ [Nn]$ ]]; then	
+		SSLOnly=false
+	else
+		SSLOnly=true
+	fi
+	
+	#  Additional questions if Manual installation is selected
+	if [[ $MANUAL == 'true' ]]; then	
+		#  Root directory where PHP files are served from
+		echo ''
+		read -p 'What is the Web Server Root Directory where the Tech Bench files are loaded to? ['$WEBROOT']:  ' WEBROOT
+		
+		#  Name of the database to use
+		echo ''
+		read -p 'Please enter the name of the database to hold the Tech Bench data ['$DBName']:  ' DBName
+		
+		#  Username and password to access database
+		while true; do
+			read -p 'Please enter the name of the database user:  ' DBUser
+			read -p 'Please enter the password of the database user:  ' -s DBPass
+
+			if [[ $DBUser != 'root' ]]; then
+				break
+			fi
+
+			printf '\n\n Using the "root" database user can be very insecure.'
+			read -p 'Are you sure you want to continue with this database user? [y/n]'  cont  
+
+			if [[ $cont =~ ^[Yy]$ ]]; then
+				break
+			fi
+		done
+	fi
+	
+	
+	# echo '' 
+	
+	
+	# exit 1
+	
+	
 	#  Check prerequisites
+	printf 'Checking Dependencies...\n\n' | tee -a $LOGFILE
 	checkApache
 	checkMysql
 	checkPHP
 	
-	installLamp
+	#installLamp
 
 	printf '\n\ndone'
 	exit 1
@@ -132,8 +191,10 @@ checkPHP()
 #  Install the LAMP Stack 
 installLamp()
 {
-	apt-get update > /dev/null
-	apt-get install lamp-server^ -y > /dev/null
+	apt-get -q update > /dev/null
+	apt-get -q install lamp-server^ -y > /dev/null
+	
+	# sed -i "s//var/www/html///var/www/html/\n<Document>/" 000-default.conf
 }
 
 

@@ -1,4 +1,155 @@
 #!/bin/bash
+################################################################################
+#                                                                              #
+#  This bash script is for the initial installation of the Tech Bench          #
+#                                                                              #
+################################################################################
+
+#  Log File Location
+LOGFILE=install.log
+#  Minimum PHP Version Required to run Tech Bench
+minimumPHPVer=72;
+minimumPHPReadable=7.2
+
+#  Variables
+PREREQ=true
+
+#  Verify the script is being run as root
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root"  | tee $LOGFILE
+   exit 1
+fi
+
+main()
+{
+	###  Start installation process  ###
+	clear
+	tput setaf 4
+	echo '##################################################################' | tee $LOGFILE
+	echo '#                                                                #' | tee -a $LOGFILE
+	echo '#                 Welcome to the Tech Bench Setup                #' 
+	echo '#                   Tech Bench Installation Log                  #' >> $LOGFILE
+	echo '#                                                                #' | tee -a $LOGFILE
+	echo '##################################################################' | tee -a $LOGFILE
+	echo '' | tee -a $LOGFILE
+	tput sgr0
+	printf 'Checking Dependencies...\n\n' | tee -a $LOGFILE
+
+	#  Check the dependencies to make sure they are installed
+	checkApache
+	checkMysql
+	checkPHP
+	# checkApacheRewrite
+	checkComposer
+
+	## TODO - Check for Apache Rewrite Module
+	## TODO - Check for php DOM extension (sudo apt-get install php-xml)
+	## TODO - Check for PHP Zip extension
+
+	#  Check if all prerequesits have passed or not.  If a prereq fails, exit script
+	if test $PREREQ = false; then
+		printf '\n\nOne or more prerequesits has failed.\nPlease install the missing prerequesits and run this installer again.\n\n' | tee -a $LOGFILE
+		exit 1
+	fi
+	printf '\nLooking Good - lets move on...\n\n' | tee -a $LOGFILE
+
+	###  Gather Information for the Install  ###
+	while true; do
+		gatherData
+		###  Verify all the information is correct ###
+		printf '\n\nPlease Verify the Information is Correct:\n\n'
+		echo 'Webroot Directory:          ' $RootDir
+		echo 'Tech Bench URL:             ' $WebURL
+		echo 'Database Name               ' $DBName
+		echo 'Database User               ' $DBUser
+		echo 'Database Password            <redacted>'
+		printf '\n'
+		read -p 'Would you like to continue? [y/n]'  doInstall  
+
+		if [[ $doInstall =~ ^[Yy]$ ]]; then
+			break
+		fi	
+	done
+
+	###  Setup the Tech Bench  ###
+	echo 'Setting up Tech Bench.  Please wait...'
+	chmod -R 777 $RootDir #  Temporarily allow full write access so script can download composer files
+	cd $RootDir
+	if [[ $ExistingDB =~ ^[Nn]$ ]]; then
+		# mysql -u$DBUser -p$DBPass  
+		mysql -u$DBUser -p$DBPass -e "CREATE DATABASE IF NOT EXISTS \`${DBName}\`;"
+		mysql -u$DBUser -p$DBPass -e "GRANT ALL PRIVILEGES ON \`${DBName}\`.* TO '${DBUser}'@'localhost' WITH GRANT OPTION;"
+		mysql -u$DBUser -p$DBPass -e "GRANT SELECT ON INFORMATION_SCHEMA TO '${SBUser}'@'localhost';"
+		mysql -u$DBUser -p$DBPass -e "FLUSH PRIVILEGES;"
+	fi
+
+	#  TODO - Testing Here
+
+
+	exit
+
+
+
+	#  Create the .env configuration file
+	echo 'Writing Configuration File...'
+	writeEnv
+
+	#  Download all composer dependencies and generate new encryption key
+	echo 'Downloading Additional Files...'
+	su -c "composer install --optimize-autoloader --no-dev --no-interaction" $SUDO_USER
+	su -c "php artisan key:generate" $SUDO_USER# exit 1
+
+	#  Setup the database
+	echo 'Setting Up Database...'
+	su -c "php artisan migrate --force" $SUDO_USER
+
+
+
+	# Finish the install
+	exit 1
+	echo 'Almost Done...'
+	chmod -R 755 $RootDir
+	su -c "php artisan storage:link" $SUDO_USER
+
+	##  Show Finished Message  ##
+	# clear
+	tput setaf 4
+	echo '##################################################################'
+	echo '#                                                                #'
+	echo '#                 The Tech Bench is ready to go!                 #'
+	echo '#                                                                #'
+	echo '##################################################################'
+	tput sgr0
+	echo ''
+	echo 'Visit '$WebURL' and log in with the default user name and password:'
+	echo ''
+	echo 'Username:  admin'
+	echo 'Password:  password'
+	echo ''
+	echo 'Post Install Instructions:'
+	echo ''
+	echo 'For security purposes it is highly recommended to change the Apache ' | tee -a $LOGFILE
+	echo 'conf file to point to '$PROD_DIR'/public.' | tee -a $LOGFILE
+	echo ''
+	echo 'More information can be found in the log file'
+
+
+	exit 1
+}
+
+spin()
+{
+    spinner="/|\\-/|\\-"
+    while:
+    do
+        for i in `seq 0 7`
+        do  
+            echo -n "${spinner:$i:1}"
+            echo -en "\010"
+            sleep 0.5
+        done
+    done
+}
 
 ###  Dependency Functions ###
 #  Check Apache is installed and running
@@ -198,3 +349,7 @@ writeEnv()
     echo '# MAX_UPLOAD=2147483648' >> .env
 }
 
+
+
+
+main

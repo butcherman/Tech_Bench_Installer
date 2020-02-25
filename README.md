@@ -17,8 +17,8 @@ The following requirements must be met in order for Tech Bench to install and ru
 It is highly recommended, although not required that the Tech Bench is run using HTTPS with a valid SSL Certificate.  
 
 ## Installation Instructions
-*  [Manual Installation](Manual_Installation/Instructions.md)
-*  [Ubuntu 19.10 and higher](Ubuntu_Server/Instructions.md)
+*  [Manual Installation](src/Manual_Installation/Instructions.md)
+*  [Ubuntu 19.10 and higher](src/Ubuntu_Server/Instructions.md)
 
 
 

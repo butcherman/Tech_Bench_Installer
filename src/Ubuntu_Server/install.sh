@@ -11,28 +11,30 @@ LOGFILE=install.log
 minimumPHPVer=72;
 minimumPHPReadable=7.2
 
-#  Variables
+#  Variables 
 PREREQ=true
 MODULE=true
-MANUAL=false
-
+MANUAL=false 
+WASINS=false
+SPIN_PID=0
+ 
 #  File Locations
 WEBROOT=\/var\/www\/html
 
 #  Install Data Variables
-WebURL=localhost.com
+WebURL=localhost.com 
 SSLOnly=true
 DBName=tech-bench
 DBUser=tbUser
 DBPass=null
-VIRDIR=true
+VIRDIR=true  
 
 #  Verify the script is being run as root
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"  | tee $LOGFILE
    exit 1
 fi
-
+  
 #  Primary script
 main()
 {
@@ -102,23 +104,35 @@ main()
 	#  Check prerequisites
 	printf 'Checking Dependencies...\n\n' | tee -a $LOGFILE
 	checkPrereqs
+	printf '\n'
+	
+	#  If the prerequisites fail, the installer will terminate
+	if [ $PREREQ == 'false' ]; then
+		echo 'You are missing one or more dependencies'
+		echo 'These must be installed before we can continue installation process'
+		printf '\n\n'		
+		exit 1
+	fi
 
+	tput setaf 2
+	echo 'Looking good so far'
+	echo 'Lets continue'
+	printf '\n\n'
+	tput sgr0
 
-
 	
 	
 	
-	
-	
-	
-	
+	#############################################
+	#############################################
+	#############################################
 	
 	
 	
 	
 
 	printf '\n\ndone\n\n'
-	exit 1
+	exit 0
 }
 
 help()
@@ -130,6 +144,7 @@ help()
 #  Only run the prerequisite check and exit
 check()
 {
+	LOGFILE=\/dev\/null
 	MANUAL=true
 	clear
 	tput setaf 4
@@ -138,12 +153,22 @@ check()
 	echo '#                 Welcome to the Tech Bench Setup                #' 
 	echo '#                                                                #' 
 	echo '##################################################################' 
-	echo '' | tee -a $LOGFILE
+	echo '' 
 	tput sgr0
 	
 	#  Check prerequisites
-	printf 'Checking Dependencies...\n\n' | tee -a $LOGFILE
+	printf 'Checking Dependencies...\n\n' 
 	checkPrereqs
+	
+	echo ''
+	if [ $PREREQ == 'true' ]; then
+		echo 'All dependencies are installed'
+	else
+		echo 'You are missing one or more dependencies.'
+		echo 'The missing dependencies must be installed before Tech Bench can be installed'
+	fi
+	echo ''
+	exit 0
 }
 
 #  Check prerequisites
@@ -155,13 +180,16 @@ checkPrereqs()
 	checkPHP
 	
 	#  Check proper modules are installed
-	checkModules
+	if [ $PREREQ == 'true' ]; then
+		checkModules
+	fi
 	
 	#  Check third party software is installed for package management
 	checkComposer
 	checkNodeJS
 	checkNPM
 	checkUnzip
+	checkSupervisor
 }
 
 #  Check Apache is installed and running
@@ -172,11 +200,15 @@ checkApache()
         tput setaf 2
         echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
-		echo -en '[INSTALLING]'
-		apt-get -q update > $LOGFILE
-		apt-get -q install lamp-server^ -y > $LOGFILE
-		echo -ne '\b\b\b\bED] '
-		echo '[INSTALLED]' >> $LOGFILE
+		echo 'Apache is not Installed' >> $LOGFILE 2>&1
+		echo 'Installing LAMP Server' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING] '
+		startSpin
+		apt-get -q update >> $LOGFILE
+		apt-get -q install lamp-server^ -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\b\bED]      \n'
+		echo 'LAMP Server Installed' >> $LOGFILE 2>&1
+		WASINS=true
     else	
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -190,8 +222,12 @@ checkMysql()
 {
     printf 'MySQL                                                       ' | tee -a $LOGFILE
     if systemctl is-active --quiet mysql; then
-        tput setaf 2
-        echo '[PASS]' | tee -a $LOGFILE
+        if [ $WASINS == 'false' ]; then
+			tput setaf 2
+			echo '[PASS]' | tee -a $LOGFILE
+		else
+			echo '[INSTALLED]' | tee -a $LOGFILE
+		fi
     else	
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -206,10 +242,13 @@ checkPHP()
     printf 'PHP '$minimumPHPReadable'                                                     ' | tee -a $LOGFILE
     if hash php 2>/dev/null; then
         PHPVersion=$(php --version | head -n 1 | cut -d " " -f 2 | cut -c 1,3)
-        # minimumRequiredVersion=71;
         if (($PHPVersion >= $minimumPHPVer)); then
-            tput setaf 2
-            echo '[PASS]' | tee -a $LOGFILE
+            if [ $WASINS == 'false' ]; then
+				tput setaf 2
+				echo '[PASS]' | tee -a $LOGFILE
+			else
+				echo '[INSTALLED]' | tee -a $LOGFILE
+			fi
         else
             tput setaf 1
             echo '[FAIL]' | tee -a $LOGFILE
@@ -228,16 +267,20 @@ checkModules()
 {
 	#  PHP-XML Module
 	printf 'PHP-XML Module                                              ' | tee -a $LOGFILE
-	XMLMod=$(php -m | grep -c xml)
+	XMLMod=$(php -m | grep -c xml) 
 	
 	if (( $XMLMod > 0 )); then
-		tput setaf 2
-            echo '[PASS]' | tee -a $LOGFILE
+		if [ $WASINS == 'false' ]; then
+			tput setaf 2
+			echo '[PASS]' | tee -a $LOGFILE
+		else
+			echo '[INSTALLED]' | tee -a $LOGFILE
+		fi
 	elif [ $MANUAL == 'false' ]; then
 		echo -en '[INSTALLING]'
-		apt-get install php-xml -y > $LOGFILE
-		echo -ne '\b\b\b\bED] '
-		echo '[INSTALLED]' >> $LOGFILE
+		apt-get install php-xml -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      '
+		echo '[INSTALLED]' >> $LOGFILE 2>&1
     else	
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -253,10 +296,11 @@ checkModules()
 		tput setaf 2
             echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
+		echo 'PHP-ZIP Module is not Installed.  Installing' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING]'
-		apt-get install php-zip -y > $LOGFILE
-		echo -ne '\b\b\b\bED] \n'
-		echo '[INSTALLED]' >> $LOGFILE
+		apt-get install php-zip -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      \n'
+		echo 'PHP-ZIP Module Installed' >> $LOGFILE 2>&1
     else	
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -272,10 +316,11 @@ checkModules()
 		tput setaf 2
             echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
+		echo 'PHP-GD Module is not Installed.  Installing' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING]'
-		apt-get install php-gd -y > $LOGFILE
-		echo -ne '\b\b\b\bED] '
-		echo '[INSTALLED]' >> $LOGFILE
+		apt-get install php-gd -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      \n'
+		echo 'PHP-GD Module Installed' >> $LOGFILE 2>&1
     else	
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -292,10 +337,11 @@ checkComposer()
 	COMPOSER=$?
 	if [[ $COMPOSER -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
+			echo 'Composer is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
-			apt-get install composer -y > $LOGFILE
-			echo -ne '\b\b\b\bED] \n'
-			echo '[INSTALLED]' >> $LOGFILE
+			apt-get install composer -y >> $LOGFILE 2>&1
+			echo -ne '\b\b\b\bED]      \n'
+			echo 'Composer Installed' >> $LOGFILE 2>&1
 		else
 			tput setaf 1
 			echo '[FAIL]' | tee -a $LOGFILE
@@ -316,10 +362,11 @@ checkNodeJS()
 	NODE=$?
 	if [[ $NODE -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
+		echo 'NodeJS is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
-			apt-get install nodejs -y > $LOGFILE
-			echo -ne '\b\b\b\bED] \n'
-			echo '[INSTALLED]' >> $LOGFILE
+			apt-get install nodejs -y >> $LOGFILE 2>&1
+			echo -ne '\b\b\b\bED]      \n'
+			echo 'NodeJS Installed' >> $LOGFILE 2>&1
 		else
 			tput setaf 1
 			echo '[FAIL]' | tee -a $LOGFILE
@@ -332,18 +379,19 @@ checkNodeJS()
 	tput sgr0
 }
 
+#  Check if NPM is installed
 checkNPM()
 {
-	# Check if NPM is installed
 	printf 'NPM                                                         ' | tee -a $LOGFILE
 	npm -v > /dev/null 2>&1
 	NODE=$?
 	if [[ $NODE -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
+			echo 'NPM is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
-			apt-get install npm -y > $LOGFILE
-			echo -ne '\b\b\b\bED] \n'
-			echo '[INSTALLED]' >> $LOGFILE
+			apt-get install npm -y >> $LOGFILE 2>&1
+			echo -ne '\b\b\b\bED]      \n'
+			echo 'NPM Installed' >> $LOGFILE 2>&1
 		else
 			tput setaf 1
 			echo '[FAIL]' | tee -a $LOGFILE
@@ -356,9 +404,9 @@ checkNPM()
 	tput sgr0
 }
 
+#  Check if Unzip is installed
 checkUnzip()
 {
-	# Check if Unzip is installed
 	printf 'Unzip                                                       ' | tee -a $LOGFILE
 	unzip -v > /dev/null 2>&1
 	NODE=$?
@@ -373,38 +421,74 @@ checkUnzip()
 	tput sgr0
 }
 
+#  Check if supervisor is installed
+checkSupervisor()
+{
+	printf 'Supervisor                                                  ' | tee -a $LOGFILE
+	supervisord -v > /dev/null 2>&1
+	NODE=$?
+	if [[ $NODE -ne 0 ]]; then
+		if [ $MANUAL == 'false' ]; then
+			echo 'Supervisor is not Installed.  Installing' >> $LOGFILE 2>&1
+			echo -en '[INSTALLING]'
+			apt-get install supervisor -y >> $LOGFILE 2>&1
+			echo -ne '\b\b\b\bED]      \n'
+			echo 'Supervisor Installed' >> $LOGFILE 2>&1
+		else
+			tput setaf 1
+			echo '[FAIL]' | tee -a $LOGFILE
+			PREREQ=false
+		fi
+	else
+		tput setaf 2
+		echo '[PASS]' | tee -a $LOGFILE
+	fi
+	tput sgr0
+}
 
+#  Spinner to show while background processes are running
+spin()
+{
+	spinner="/|\\-/|\\-"
+	while :
+	do
+		for i in `seq 0 7`
+		do
+			echo -n "${spinner:$i:1}"
+			echo -en "\010"
+			sleep 1
+		done
+	done
+}
 
-
-
-
-
-
-
-
+#  Start the spinner
+startSpin()
+{
+	spin &
+	SPIN_PID=$!
+	trap "kill -9 $SPIN_PID" `seq 0 15`
+	echo -en "\b "
+}
 
 #  Check arguments
 while [ "$1" != "" ]; do
 	case $1 in
 		-m | --manual )	shift
 						MANUAL=true
-						main
-						exit 1
 						;;
 		-c | --check )	shift	
 						check
-						exit 1
+						exit 0
 						;;
 		-h | --help )	shift
 						help
-						exit 1
+						exit 0
 						;;
 		* )				main
-						exit 1				
+						exit 0			
 	esac
 	shift
 done
 
 main
-
 exit 0

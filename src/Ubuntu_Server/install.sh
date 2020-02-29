@@ -13,6 +13,7 @@ minimumPHPReadable=7.2
 
 #  Variables
 PREREQ=true
+MODULE=true
 MANUAL=false
 
 #  File Locations
@@ -24,24 +25,13 @@ SSLOnly=true
 DBName=tech-bench
 DBUser=tbUser
 DBPass=null
+VIRDIR=true
 
 #  Verify the script is being run as root
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"  | tee $LOGFILE
    exit 1
 fi
-
-#  Check arguments
-while [ "$1" != "" ]; do
-	case $1 in
-		-m | --manual )	shift
-						MANUAL=true
-						;;
-		* )				main
-						exit 1				
-	esac
-	shift
-done
 
 #  Primary script
 main()
@@ -98,25 +88,80 @@ main()
 				break
 			fi
 		done
+		
+		#  Ask if virtual directories are already built
+		echo ''
+		read -p 'Build custom virtual sites for Tech Bench (Recommended)? [Y/N]: ' VIRDIR
+		if [[ $VIRDIR =~ [Nn]$ ]]; then	
+		VIRDIR=false
+		else
+			VIRDIR=true
+		fi
 	fi
-	
-	
-	# echo '' 
-	
-	
-	# exit 1
-	
 	
 	#  Check prerequisites
 	printf 'Checking Dependencies...\n\n' | tee -a $LOGFILE
+	checkPrereqs
+
+
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+	printf '\n\ndone\n\n'
+	exit 1
+}
+
+help()
+{
+	echo 'help menu'
+	#  TODO - Create a help menu
+}
+
+#  Only run the prerequisite check and exit
+check()
+{
+	MANUAL=true
+	clear
+	tput setaf 4
+	echo '##################################################################' 
+	echo '#                                                                #' 
+	echo '#                 Welcome to the Tech Bench Setup                #' 
+	echo '#                                                                #' 
+	echo '##################################################################' 
+	echo '' | tee -a $LOGFILE
+	tput sgr0
+	
+	#  Check prerequisites
+	printf 'Checking Dependencies...\n\n' | tee -a $LOGFILE
+	checkPrereqs
+}
+
+#  Check prerequisites
+checkPrereqs()
+{
+	#  Check for web server
 	checkApache
 	checkMysql
 	checkPHP
 	
-	#installLamp
-
-	printf '\n\ndone'
-	exit 1
+	#  Check proper modules are installed
+	checkModules
+	
+	#  Check third party software is installed for package management
+	checkComposer
+	checkNodeJS
+	checkNPM
+	checkUnzip
 }
 
 #  Check Apache is installed and running
@@ -128,7 +173,8 @@ checkApache()
         echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
 		echo -en '[INSTALLING]'
-		installLamp
+		apt-get -q update > $LOGFILE
+		apt-get -q install lamp-server^ -y > $LOGFILE
 		echo -ne '\b\b\b\bED] '
 		echo '[INSTALLED]' >> $LOGFILE
     else	
@@ -177,28 +223,188 @@ checkPHP()
     tput sgr0
 }
 
-
-
-
-
-
-
-
-
-
-
-
-#  Install the LAMP Stack 
-installLamp()
+#  Make sure that all of the needed PHP modules are installed
+checkModules()
 {
-	apt-get -q update > /dev/null
-	apt-get -q install lamp-server^ -y > /dev/null
+	#  PHP-XML Module
+	printf 'PHP-XML Module                                              ' | tee -a $LOGFILE
+	XMLMod=$(php -m | grep -c xml)
 	
-	# sed -i "s//var/www/html///var/www/html/\n<Document>/" 000-default.conf
+	if (( $XMLMod > 0 )); then
+		tput setaf 2
+            echo '[PASS]' | tee -a $LOGFILE
+	elif [ $MANUAL == 'false' ]; then
+		echo -en '[INSTALLING]'
+		apt-get install php-xml -y > $LOGFILE
+		echo -ne '\b\b\b\bED] '
+		echo '[INSTALLED]' >> $LOGFILE
+    else	
+        tput setaf 1
+        echo '[FAIL]' | tee -a $LOGFILE
+        PREREQ=false
+    fi
+    tput sgr0
+		
+	#  PHP-ZIP Module
+	printf 'PHP-ZIP Module                                              ' | tee -a $LOGFILE
+	ZIPMod=$(php -m | grep -c zip)
+	
+	if (( $ZIPMod > 0 )); then
+		tput setaf 2
+            echo '[PASS]' | tee -a $LOGFILE
+	elif [ $MANUAL == 'false' ]; then
+		echo -en '[INSTALLING]'
+		apt-get install php-zip -y > $LOGFILE
+		echo -ne '\b\b\b\bED] \n'
+		echo '[INSTALLED]' >> $LOGFILE
+    else	
+        tput setaf 1
+        echo '[FAIL]' | tee -a $LOGFILE
+        PREREQ=false
+    fi
+    tput sgr0
+		
+	#  PHP-GD Module
+	printf 'PHP-GD Module                                               ' | tee -a $LOGFILE
+	GDMod=$(php -m | grep -c gd)
+	
+	if (( $GDMod > 0 )); then
+		tput setaf 2
+            echo '[PASS]' | tee -a $LOGFILE
+	elif [ $MANUAL == 'false' ]; then
+		echo -en '[INSTALLING]'
+		apt-get install php-gd -y > $LOGFILE
+		echo -ne '\b\b\b\bED] '
+		echo '[INSTALLED]' >> $LOGFILE
+    else	
+        tput setaf 1
+        echo '[FAIL]' | tee -a $LOGFILE
+        PREREQ=false
+    fi
+    tput sgr0
+}
+
+# Check if Composer is installed
+checkComposer()
+{
+	printf 'Composer                                                    ' | tee -a $LOGFILE
+	composer -v > /dev/null 2>&1
+	COMPOSER=$?
+	if [[ $COMPOSER -ne 0 ]]; then
+		if [ $MANUAL == 'false' ]; then
+			echo -en '[INSTALLING]'
+			apt-get install composer -y > $LOGFILE
+			echo -ne '\b\b\b\bED] \n'
+			echo '[INSTALLED]' >> $LOGFILE
+		else
+			tput setaf 1
+			echo '[FAIL]' | tee -a $LOGFILE
+			PREREQ=false
+		fi
+	else
+		tput setaf 2
+		echo '[PASS]' | tee -a $LOGFILE
+	fi
+	tput sgr0
+}
+
+# Check if NodeJS is installed
+checkNodeJS()
+{
+	printf 'NodeJS                                                      ' | tee -a $LOGFILE
+	node -v > /dev/null 2>&1
+	NODE=$?
+	if [[ $NODE -ne 0 ]]; then
+		if [ $MANUAL == 'false' ]; then
+			echo -en '[INSTALLING]'
+			apt-get install nodejs -y > $LOGFILE
+			echo -ne '\b\b\b\bED] \n'
+			echo '[INSTALLED]' >> $LOGFILE
+		else
+			tput setaf 1
+			echo '[FAIL]' | tee -a $LOGFILE
+			PREREQ=false
+		fi
+	else
+		tput setaf 2
+		echo '[PASS]' | tee -a $LOGFILE
+	fi
+	tput sgr0
+}
+
+checkNPM()
+{
+	# Check if NPM is installed
+	printf 'NPM                                                         ' | tee -a $LOGFILE
+	npm -v > /dev/null 2>&1
+	NODE=$?
+	if [[ $NODE -ne 0 ]]; then
+		if [ $MANUAL == 'false' ]; then
+			echo -en '[INSTALLING]'
+			apt-get install npm -y > $LOGFILE
+			echo -ne '\b\b\b\bED] \n'
+			echo '[INSTALLED]' >> $LOGFILE
+		else
+			tput setaf 1
+			echo '[FAIL]' | tee -a $LOGFILE
+			PREREQ=false
+		fi
+	else
+		tput setaf 2
+		echo '[PASS]' | tee -a $LOGFILE
+	fi
+	tput sgr0
+}
+
+checkUnzip()
+{
+	# Check if Unzip is installed
+	printf 'Unzip                                                       ' | tee -a $LOGFILE
+	unzip -v > /dev/null 2>&1
+	NODE=$?
+	if [[ $NODE -ne 0 ]]; then
+		tput setaf 1
+		echo '[FAIL]' | tee -a $LOGFILE
+		PREREQ=false
+	else
+		tput setaf 2
+		echo '[PASS]' | tee -a $LOGFILE
+	fi
+	tput sgr0
 }
 
 
+
+
+
+
+
+
+
+
+
+#  Check arguments
+while [ "$1" != "" ]; do
+	case $1 in
+		-m | --manual )	shift
+						MANUAL=true
+						main
+						exit 1
+						;;
+		-c | --check )	shift	
+						check
+						exit 1
+						;;
+		-h | --help )	shift
+						help
+						exit 1
+						;;
+		* )				main
+						exit 1				
+	esac
+	shift
+done
+
 main
 
-
-
+exit 0

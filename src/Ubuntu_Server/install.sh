@@ -20,9 +20,11 @@ SPIN_PID=0
  
 #  File Locations
 WEBROOT=\/var\/www\/html
+USEFILE=null
 
 #  Install Data Variables
-WebURL=localhost.com 
+WebURL=localhost
+FullURL=https:\/\/localhost
 SSLOnly=true
 DBName=tech-bench
 DBUser=tbUser
@@ -101,6 +103,13 @@ main()
 		fi
 	fi
 	
+	#  Set the full URL that will be used to access the website
+	if [ $SSLOnly == 'true' ]; then
+		FullURL=https:\\/\\/$WebURL
+	else
+		FullURL=http:\\/\\/$WebURL
+	fi
+	
 	#  Check prerequisites
 	printf 'Checking Dependencies...\n\n' | tee -a $LOGFILE
 	checkPrereqs
@@ -117,9 +126,12 @@ main()
 	tput setaf 2
 	echo 'Looking good so far'
 	echo 'Lets continue'
-	printf '\n\n'
+	printf '\n'
 	tput sgr0
-
+	
+	#  Determine which installation files to use and install them
+	checkPackage
+	installPackage
 	
 	
 	
@@ -444,6 +456,73 @@ checkSupervisor()
 		echo '[PASS]' | tee -a $LOGFILE
 	fi
 	tput sgr0
+}
+
+#  Check for the proper installation package
+checkPackage()
+{
+	FILELIST=(`ls | grep Tech_Bench`)
+	LISTLEN=${#FILELIST[*]}
+	USEINDEX=null
+
+	if [ $LISTLEN == 0 ]; then
+		echo 'Downloading latest Tech Bench release'
+		startSpin
+		USEFILE=Tech_Bench_latest.zip
+		GETURL=$(curl -s https://api.github.com/repos/butcherman/tech_bench/releases/latest | grep zipball_url | cut -d : -f 2,3 | tr -d \" | tr -d \,)
+		wget -O $USEFILE $GETURL > /dev/null 2>&1
+	elif [ $LISTLEN -ne 1 ]; then
+		while true; do
+			echo 'Please select the Tech Bench installation package to install'
+			echo ''
+			i=0
+			while [ $i -lt $LISTLEN ]; do
+				echo "$i: ${FILELIST[$i]}"
+				let i++
+			done
+			echo ''
+			read -p 'Please select 0 through '$LISTLEN' [0]:  ' USEINDEX
+			
+			if [[ ! $USEINDEX =~ ^[+-]?[0-9]+$ ]]; then
+				echo 'Numbers Only Please'
+			elif [[ $USEINDEX -le $LISTLEN ]]; then
+				USEFILE=${FILELIST[$USEINDEX]}
+				break
+			fi
+		done
+	else
+		USEFILE=${FILELIST[0]}
+	fi
+	
+	printf 'Using '$USEFILE' as installation package'
+}
+
+#  Move the installation files to the WebRoot directory
+installPackage()
+{
+	#  Add the current user to the www-data group
+	usermod -a -G www-data $SUDO_USER
+
+	#  Unzip installation files
+	echo 'Extracting Files'
+	DIRNAME=$(zipinfo -1 $USEFILE | grep -o "^[^/]\+[/]" | sort -u | tr -d \/)
+	unzip $USEFILE >> $LOGFILE
+
+	#  Move files to web root directory
+	cp -r $DIRNAME/* $WEBROOT
+	cp -r $DIRNAME/.htaccess $WEBROOT/.htaccess
+	cp -r $DIRNAME/.env.example $WEBROOT/.env
+
+	#  Set file permissions and owner
+	chown -R www-data:www-data $WEBROOT
+	chmod 777 $WEBROOT/storage/logs
+	chmod 777 $WEBROOT/storage/app/public
+	
+	#  Write the configuration settings to the .env file
+	sed -i "s/APP_URL=http:\/\/localhost/APP_URL=$FullURL/g" $WEBROOT/.env
+	sed -i "s/DB_DATABASE=tech-bench/DB_DATABASE=$DBName/g" $WEBROOT/.env
+	sed -i "s/DB_USERNAME=root/DB_USERNAME=$DBUser/g" $WEBROOT/.env
+	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$DBPass/g" $WEBROOT/.env
 }
 
 #  Spinner to show while background processes are running

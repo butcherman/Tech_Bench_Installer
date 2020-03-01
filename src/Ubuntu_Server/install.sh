@@ -17,6 +17,7 @@ MODULE=true
 MANUAL=false 
 WASINS=false
 SPIN_PID=0
+BRANCH=null
  
 #  File Locations
 WEBROOT=\/var\/www\/html
@@ -133,6 +134,10 @@ main()
 	checkPackage
 	installPackage
 	
+	#  Create new virtual directory files for the Tech Bench site
+	if [ $VIRDIR == 'true' ]; then 
+		writeConfFiles
+	fi
 	
 	
 	#############################################
@@ -461,11 +466,24 @@ checkSupervisor()
 #  Check for the proper installation package
 checkPackage()
 {
-	FILELIST=(`ls | grep Tech_Bench`)
+	FILELIST=(`find . -maxdepth 1 -not -type d | grep Tech_Bench | tr -d .\/zip`)
 	LISTLEN=${#FILELIST[*]}
 	USEINDEX=null
 
-	if [ $LISTLEN == 0 ]; then
+	if [ "$BRANCH" != 'null' ]; then
+		echo 'Downloading Branch '$BRANCH
+		
+		USEFILE=Tech_Bench_$BRANCH.zip
+		RESPONSE=$(wget --server-response -O $USEFILE https://api.github.com/repos/butcherman/tech_bench/zipball/$BRANCH 2>&1 | awk '/^  HTTP/{print $2}')
+		CODES=($RESPONSE)
+		if [[ ${CODES[1]} -ne '200' ]]; then
+			tput setaf 1
+			echo 'There was an issue downloading from Branch '$BRANCH'.'
+			echo 'Verify this is a valid branch and try again.'
+			tput sgr0
+			exit 1
+		fi
+	elif [ $LISTLEN == 0 ]; then
 		echo 'Downloading latest Tech Bench release'
 		startSpin
 		USEFILE=Tech_Bench_latest.zip
@@ -494,7 +512,7 @@ checkPackage()
 		USEFILE=${FILELIST[0]}
 	fi
 	
-	printf 'Using '$USEFILE' as installation package'
+	echo 'Using '$USEFILE' as installation package'
 }
 
 #  Move the installation files to the WebRoot directory
@@ -507,7 +525,10 @@ installPackage()
 	echo 'Extracting Files'
 	DIRNAME=$(zipinfo -1 $USEFILE | grep -o "^[^/]\+[/]" | sort -u | tr -d \/)
 	unzip $USEFILE >> $LOGFILE
-
+	
+	#  Empty any existing files out of the Web Root directory 
+	find $WEBROOT/ -type f -delete
+	
 	#  Move files to web root directory
 	cp -r $DIRNAME/* $WEBROOT
 	cp -r $DIRNAME/.htaccess $WEBROOT/.htaccess
@@ -525,6 +546,85 @@ installPackage()
 	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$DBPass/g" $WEBROOT/.env
 }
 
+#  Write new apache config files
+writeConfFiles()
+{
+	echo 'Creating Apache Virtual Directories'
+	
+	#  Disable any existing sites on the server
+	ENABLEDSITES=(`ls /etc/apache2/sites-enabled`)
+	ENABLEDLENGTH=${#ENABLEDSITES[*]}
+	if [ $ENABLEDLENGTH -ne 0 ]; then
+		echo 'has sites'
+		i=0
+		while [ $i -lt $ENABLEDLENGTH ]; do
+			a2dissite ${ENABLEDSITES[$i]} >> $LOGFILE
+			let i++
+		done
+	fi
+	
+	#  Create the new http site
+	touch /etc/apache2/sites-available/TechBench.conf
+	echo '<VirtualHost *:80>' >> /etc/apache2/sites-available/TechBench.conf
+	echo '	ServerAdmin webmaster@localhost' >> /etc/apache2/sites-available/TechBench.conf
+	echo '	DocumentRoot /var/www/html/public' >> /etc/apache2/sites-available/TechBench.conf
+	echo '	<Directory "/var/www/html/public">' >> /etc/apache2/sites-available/TechBench.conf
+	echo '		Options Indexes FollowSymLinks MultiViews' >> /etc/apache2/sites-available/TechBench.conf
+	echo '		AllowOverride All' >> /etc/apache2/sites-available/TechBench.conf
+	echo '		Order allow,deny' >> /etc/apache2/sites-available/TechBench.conf
+	echo '		Allow from all' >> /etc/apache2/sites-available/TechBench.conf
+	echo '	</Directory>' >> /etc/apache2/sites-available/TechBench.conf
+	echo '' >> /etc/apache2/sites-available/TechBench.conf
+	echo '	ErrorLog ${APACHE_LOG_DIR}/error.log' >> /etc/apache2/sites-available/TechBench.conf
+	echo '	CustomLog ${APACHE_LOG_DIR}/access.log combined' >> /etc/apache2/sites-available/TechBench.conf
+	if [ $SSLOnly == 'true' ]; then
+		echo ''	 >> /etc/apache2/sites-available/TechBench.conf
+		echo '	RewriteEngine on' >> /etc/apache2/sites-available/TechBench.conf
+		echo '	RewriteCond %{SERVER_NAME} ='$WebURL' [OR]' >> /etc/apache2/sites-available/TechBench.conf
+        echo '	RewriteCond %{SERVER_NAME} ='$FullURL >> /etc/apache2/sites-available/TechBench.conf
+        echo '	RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]' >> /etc/apache2/sites-available/TechBench.conf
+		echo '' >> /etc/apache2/sites-available/TechBench.conf
+	fi
+	echo '</VirtualHost>' >> /etc/apache2/sites-available/TechBench.conf
+	
+	#  Create the new https site
+	touch /etc/apache2/sites-available/SSLTechBench.conf
+	echo '<IfModule mod_ssl.c>' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '	<VirtualHost *:443' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		ServerAdmin webmaster@localhost' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		DocumentRoot /var/www/html/public' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		<Directory "/var/www/html/public">' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '			Options Indexes FollowSymLinks MultiViews' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '			AllowOverride All' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '			Order allow,deny' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '			Allow from all' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		</Directory>' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		ErrorLog ${APACHE_LOG_DIR}/error.log' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		CustomLog ${APACHE_LOG_DIR}/access.log combined' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		SSLEngine on' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		SSLCertificateFile	/etc/ssl/certs/ssl-cert-snakeoil.pem' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		SSLCertificateKeyFile /etc/ssl/private/ssl-cert-snakeoil.key' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		<FilesMatch "\.(cgi|shtml|phtml|php)$">' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '			SSLOptions +StdEnvVars' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		</FilesMatch>' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		<Directory /usr/lib/cgi-bin>' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '			SSLOptions +StdEnvVars' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '		</Directory>' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '	</VirtualHost>' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '</IfModule>' >> /etc/apache2/sites-available/SSLTechBench.conf
+	
+	#  Enable the necessary modules
+	a2enmod rewrite ssl >> $LOGFILE
+	
+	#  Enable the new sites
+	a2ensite TechBench.conf    ###    ssl is broken SSLTechBench.conf >> $LOGFILE
+	
+	#  Restart Apache
+	systemctl reload apache2 >> $LOGFILE
+}
+
 #  Spinner to show while background processes are running
 spin()
 {
@@ -533,7 +633,7 @@ spin()
 	do
 		for i in `seq 0 7`
 		do
-			echo -n "${spinner:$i:1}"
+			echo -n "${spinner:$i:1}" 
 			echo -en "\010"
 			sleep 1
 		done
@@ -554,6 +654,9 @@ while [ "$1" != "" ]; do
 	case $1 in
 		-m | --manual )	shift
 						MANUAL=true
+						;;
+		-b | --branch ) shift
+						BRANCH=$1
 						;;
 		-c | --check )	shift	
 						check

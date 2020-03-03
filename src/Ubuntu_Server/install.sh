@@ -6,7 +6,8 @@
 ################################################################################
 
 #  Log File Location
-LOGFILE=install.log
+SCRIPTROOT=$(pwd)
+LOGFILE=$SCRIPTROOT/install.log
 #  Minimum PHP Version Required to run Tech Bench
 minimumPHPVer=72;
 minimumPHPReadable=7.2
@@ -16,18 +17,18 @@ PREREQ=true
 MODULE=true
 MANUAL=false 
 WASINS=false
-SPIN_PID=0
+SPIN_PID=0 
 BRANCH=null
  
 #  File Locations
-WEBROOT=\/var\/www\/html
+WEBROOT=\/var\/www\/html 
 USEFILE=null
 
 #  Install Data Variables
 WebURL=localhost
 FullURL=https:\/\/localhost
-SSLOnly=true
-DBName=tech-bench
+SSLOnly=true 
+DBName=tech-bench  
 DBUser=tbUser
 DBPass=null
 VIRDIR=true  
@@ -37,6 +38,9 @@ if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"  | tee $LOGFILE
    exit 1
 fi
+
+#  Touch the log file and make sure it can be writen to by both the sudo user and normal user
+touch $LOGFILE && chmod 777 $LOGFILE
   
 #  Primary script
 main()
@@ -112,7 +116,7 @@ main()
 	fi
 	
 	#  Check prerequisites
-	printf 'Checking Dependencies...\n\n' | tee -a $LOGFILE
+	printf '\nChecking Dependencies...\n\n' | tee -a $LOGFILE
 	checkPrereqs
 	printf '\n'
 	
@@ -138,6 +142,8 @@ main()
 	if [ $VIRDIR == 'true' ]; then 
 		writeConfFiles
 	fi
+	
+	setupApplication
 	
 	
 	#############################################
@@ -284,7 +290,7 @@ checkModules()
 {
 	#  PHP-XML Module
 	printf 'PHP-XML Module                                              ' | tee -a $LOGFILE
-	XMLMod=$(php -m | grep -c xml) 
+	XMLMod=$(php -m | grep -c dom) 
 	
 	if (( $XMLMod > 0 )); then
 		if [ $WASINS == 'false' ]; then
@@ -295,8 +301,8 @@ checkModules()
 		fi
 	elif [ $MANUAL == 'false' ]; then
 		echo -en '[INSTALLING]'
-		apt-get install php-xml -y >> $LOGFILE 2>&1
-		echo -ne '\b\b\b\bED]      '
+		apt-get install php-dom -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      \n'
 		echo '[INSTALLED]' >> $LOGFILE 2>&1
     else	
         tput setaf 1
@@ -524,7 +530,7 @@ installPackage()
 	#  Unzip installation files
 	echo 'Extracting Files'
 	DIRNAME=$(zipinfo -1 $USEFILE | grep -o "^[^/]\+[/]" | sort -u | tr -d \/)
-	unzip $USEFILE >> $LOGFILE
+	unzip -o $USEFILE >> $LOGFILE
 	
 	#  Empty any existing files out of the Web Root directory 
 	find $WEBROOT/ -type f -delete
@@ -533,11 +539,27 @@ installPackage()
 	cp -r $DIRNAME/* $WEBROOT
 	cp -r $DIRNAME/.htaccess $WEBROOT/.htaccess
 	cp -r $DIRNAME/.env.example $WEBROOT/.env
+	
+	
 
 	#  Set file permissions and owner
-	chown -R www-data:www-data $WEBROOT
-	chmod 777 $WEBROOT/storage/logs
-	chmod 777 $WEBROOT/storage/app/public
+#	chown -R www-data:www-data $WEBROOT
+#	find $WEBROOT -type f -exec chmod 644 {} \; >> $LOGFILE
+#	find $WEBROOT -type d -exec chmod 755 {} \; >> $LOGFILE
+	
+	#  Create the folders for the dependencies
+	mkdir $WEBROOT/vendor $WEBROOT/node_modules
+	chown www-data:www-data $WEBROOT/vendor $WEBROOT/node_modules
+#	chmod 775 -R $WEBROOT/vendor $WEBROOT/node_modules $WEBROOT/storage
+
+	#  For the installation process, set all permissions to 777 (note - this is only temporary)
+	chmod 777 -R $WEBROOT/*
+	chmod 777 $WEBROOT/.env
+	
+	#  If the installer is not being done manually, generate a password for the database user
+	if [ $MANUAL == 'false' ]; then
+		DBPass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+	fi
 	
 	#  Write the configuration settings to the .env file
 	sed -i "s/APP_URL=http:\/\/localhost/APP_URL=$FullURL/g" $WEBROOT/.env
@@ -555,7 +577,6 @@ writeConfFiles()
 	ENABLEDSITES=(`ls /etc/apache2/sites-enabled`)
 	ENABLEDLENGTH=${#ENABLEDSITES[*]}
 	if [ $ENABLEDLENGTH -ne 0 ]; then
-		echo 'has sites'
 		i=0
 		while [ $i -lt $ENABLEDLENGTH ]; do
 			a2dissite ${ENABLEDSITES[$i]} >> $LOGFILE
@@ -565,7 +586,7 @@ writeConfFiles()
 	
 	#  Create the new http site
 	touch /etc/apache2/sites-available/TechBench.conf
-	echo '<VirtualHost *:80>' >> /etc/apache2/sites-available/TechBench.conf
+	echo '<VirtualHost *:80>' > /etc/apache2/sites-available/TechBench.conf
 	echo '	ServerAdmin webmaster@localhost' >> /etc/apache2/sites-available/TechBench.conf
 	echo '	DocumentRoot /var/www/html/public' >> /etc/apache2/sites-available/TechBench.conf
 	echo '	<Directory "/var/www/html/public">' >> /etc/apache2/sites-available/TechBench.conf
@@ -589,8 +610,8 @@ writeConfFiles()
 	
 	#  Create the new https site
 	touch /etc/apache2/sites-available/SSLTechBench.conf
-	echo '<IfModule mod_ssl.c>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '	<VirtualHost *:443' >> /etc/apache2/sites-available/SSLTechBench.conf
+	echo '<IfModule mod_ssl.c>' > /etc/apache2/sites-available/SSLTechBench.conf
+	echo '	<VirtualHost *:443>' >> /etc/apache2/sites-available/SSLTechBench.conf
 	echo '		ServerAdmin webmaster@localhost' >> /etc/apache2/sites-available/SSLTechBench.conf
 	echo '		DocumentRoot /var/www/html/public' >> /etc/apache2/sites-available/SSLTechBench.conf
 	echo '		<Directory "/var/www/html/public">' >> /etc/apache2/sites-available/SSLTechBench.conf
@@ -619,10 +640,36 @@ writeConfFiles()
 	a2enmod rewrite ssl >> $LOGFILE
 	
 	#  Enable the new sites
-	a2ensite TechBench.conf    ###    ssl is broken SSLTechBench.conf >> $LOGFILE
+	a2ensite TechBench.conf SSLTechBench.conf >> $LOGFILE
 	
 	#  Restart Apache
-	systemctl reload apache2 >> $LOGFILE
+	systemctl reload apache2 >> $LOGFILE 
+}
+
+#  Download all dependencies from composer and NPM and setup application
+setupApplication()
+{
+	echo 'Creating Tech Bench Application'
+	#  If the installer is not being done manually, create the database and database user
+	if [ $MANUAL == 'false' ]; then
+		mysql --execute="CREATE DATABASE IF NOT EXISTS \`$DBName\`;"
+		mysql --execute="CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED WITH mysql_native_password BY '$DBPass';"
+#		mysql --execute="GRANT ALL PRIVILEGES ON \`$DBName\`.* TO '$DBUser'@'localhost' WITH GRANT OPTION;"
+		mysql --execute="GRANT ALL PRIVILEGES ON *.* TO '$DBUser'@'localhost' WITH GRANT OPTION;"
+#		mysql --execute="GRANT SELECT ON \`information_schema\`.* TO '$DBUser'@'localhost';"
+		mysql --execute="FLUSH PRIVILEGES;"
+	fi
+	
+	#  Install composer dependencies
+	cd $WEBROOT
+	su -c "composer install --no-dev --no-interaction --optimize-autoloader" $SUDO_USER &>> $LOGFILE
+	su -c "php artisan key:generate --force" $SUDO_USER # &>> $LOGFILE
+#	su -c "php artisan storage:link" $SUDO_USER # &>> $LOGFILE
+#	su -c "php artisan ziggy:generate" $SUDO_USER # &>> $LOGFILE
+	
+	#  Install NPM dependencies
+#	su -c "npm install --only=production" $SUDO_USER >> $LOGFILE
+#	su -c "npm run production" $SUDO_USER >> $LOGFILE
 }
 
 #  Spinner to show while background processes are running

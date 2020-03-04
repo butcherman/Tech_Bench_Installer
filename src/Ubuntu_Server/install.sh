@@ -28,8 +28,8 @@ USEFILE=null
 WebURL=localhost
 FullURL=https:\/\/localhost
 SSLOnly=true 
-DBName=tech-bench  
-DBUser=tbUser
+DBName=techbench  
+DBUser=root  #  tbUser
 DBPass=null
 VIRDIR=true  
 
@@ -62,24 +62,36 @@ main()
 	#  Get the full URL of the Tech Bench site
 	printf '\n\nPlease enter the full url that will be used for the Tech Bench: \n'
 	printf '(ex. techbench.domain.com)\n' 
-	read -p "Enter URL [$WebURL]:  " WebURL
+	read -p "Enter URL [$WebURL]:  " WebURL2
 	echo ''
+	#  If input was blank, use default value
+	if [[ $WebURL2 != '' ]]; then
+		WebURL=$WebURL2
+	fi
 	read -p 'Use HTTPS for Tech Bench Access (Recommended) [y/n]: ' SSLOnly
 	if [[ $SSLOnly =~ [Nn]$ ]]; then	
 		SSLOnly=false
 	else
 		SSLOnly=true
 	fi
-	
+	  
 	#  Additional questions if Manual installation is selected
 	if [[ $MANUAL == 'true' ]]; then	
 		#  Root directory where PHP files are served from
 		echo ''
-		read -p 'What is the Web Server Root Directory where the Tech Bench files are loaded to? ['$WEBROOT']:  ' WEBROOT
+		read -p 'What is the Web Server Root Directory where the Tech Bench files are loaded to? ['$WEBROOT']:  ' WEBROOT2
+		#  If input was blank, use default value
+		if [[ $WEBROOT2 != '' ]]; then
+			WEBROOT=$WEBROOT2
+		fi
 		
 		#  Name of the database to use
 		echo ''
-		read -p 'Please enter the name of the database to hold the Tech Bench data ['$DBName']:  ' DBName
+		read -p 'Please enter the name of the database to hold the Tech Bench data ['$DBName']:  ' DBName2
+		#  If input was blank, use default value
+		if [[ $DBName2 != '' ]]; then
+			DBName=$DBName2
+		fi
 		
 		#  Username and password to access database
 		while true; do
@@ -102,7 +114,7 @@ main()
 		echo ''
 		read -p 'Build custom virtual sites for Tech Bench (Recommended)? [Y/N]: ' VIRDIR
 		if [[ $VIRDIR =~ [Nn]$ ]]; then	
-		VIRDIR=false
+			VIRDIR=false
 		else
 			VIRDIR=true
 		fi
@@ -232,6 +244,7 @@ checkApache()
 		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'LAMP Server Installed' >> $LOGFILE 2>&1
 		WASINS=true
+		killSpin
     else	
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -301,9 +314,11 @@ checkModules()
 		fi
 	elif [ $MANUAL == 'false' ]; then
 		echo -en '[INSTALLING]'
+		startSpin
 		apt-get install php-dom -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo '[INSTALLED]' >> $LOGFILE 2>&1
+		killSpin
     else	
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -321,9 +336,11 @@ checkModules()
 	elif [ $MANUAL == 'false' ]; then
 		echo 'PHP-ZIP Module is not Installed.  Installing' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING]'
+		startSpin
 		apt-get install php-zip -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo 'PHP-ZIP Module Installed' >> $LOGFILE 2>&1
+		killSpin
     else	
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -341,9 +358,11 @@ checkModules()
 	elif [ $MANUAL == 'false' ]; then
 		echo 'PHP-GD Module is not Installed.  Installing' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING]'
+		startSpin
 		apt-get install php-gd -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo 'PHP-GD Module Installed' >> $LOGFILE 2>&1
+		killSpin
     else	
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -412,7 +431,9 @@ checkNPM()
 		if [ $MANUAL == 'false' ]; then
 			echo 'NPM is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
-			apt-get install npm -y >> $LOGFILE 2>&1
+#			apt-get install npm -y >> $LOGFILE 2>&1
+			mkdir npm && cd npm/
+			curl https://www.npmjs.com/install.sh | sh
 			echo -ne '\b\b\b\bED]      \n'
 			echo 'NPM Installed' >> $LOGFILE 2>&1
 		else
@@ -553,18 +574,18 @@ installPackage()
 #	chmod 775 -R $WEBROOT/vendor $WEBROOT/node_modules $WEBROOT/storage
 
 	#  For the installation process, set all permissions to 777 (note - this is only temporary)
-	chmod 777 -R $WEBROOT/*
+	chmod 777 -R $WEBROOT
 	chmod 777 $WEBROOT/.env
 	
 	#  If the installer is not being done manually, generate a password for the database user
-	if [ $MANUAL == 'false' ]; then
-		DBPass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-	fi
+#	if [ $MANUAL == 'false' ]; then
+#		DBPass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+#	fi
 	
 	#  Write the configuration settings to the .env file
 	sed -i "s/APP_URL=http:\/\/localhost/APP_URL=$FullURL/g" $WEBROOT/.env
 	sed -i "s/DB_DATABASE=tech-bench/DB_DATABASE=$DBName/g" $WEBROOT/.env
-	sed -i "s/DB_USERNAME=root/DB_USERNAME=$DBUser/g" $WEBROOT/.env
+	sed -i "s/DB_USERNAME=root/DB_USERNAME=root/g" $WEBROOT/.env        #  $DBUser/g" $WEBROOT/.env
 	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$DBPass/g" $WEBROOT/.env
 }
 
@@ -649,27 +670,29 @@ writeConfFiles()
 #  Download all dependencies from composer and NPM and setup application
 setupApplication()
 {
-	echo 'Creating Tech Bench Application'
+	echo 'Creating Tech Bench Application'  
 	#  If the installer is not being done manually, create the database and database user
-	if [ $MANUAL == 'false' ]; then
-		mysql --execute="CREATE DATABASE IF NOT EXISTS \`$DBName\`;"
-		mysql --execute="CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED WITH mysql_native_password BY '$DBPass';"
+#	if [ $MANUAL == 'false' ]; then
+#		mysql --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DBPASS';"     #  TMP work around for information_schema issues
+#		mysql -u root -p$DBPASS --execute="CREATE DATABASE IF NOT EXISTS \`$DBName\`;"
+#		mysql --execute="CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED WITH mysql_native_password BY '$DBPass';"
 #		mysql --execute="GRANT ALL PRIVILEGES ON \`$DBName\`.* TO '$DBUser'@'localhost' WITH GRANT OPTION;"
-		mysql --execute="GRANT ALL PRIVILEGES ON *.* TO '$DBUser'@'localhost' WITH GRANT OPTION;"
 #		mysql --execute="GRANT SELECT ON \`information_schema\`.* TO '$DBUser'@'localhost';"
-		mysql --execute="FLUSH PRIVILEGES;"
-	fi
-	
+#		
+#		mysql --execute="UPDATE mysql.user SET Password=PASSWORD('$DBPASS') WHERE USER='root'";
+#		mysql --execute="FLUSH PRIVILEGES;"
+#	fi
+	  
 	#  Install composer dependencies
 	cd $WEBROOT
 	su -c "composer install --no-dev --no-interaction --optimize-autoloader" $SUDO_USER &>> $LOGFILE
-	su -c "php artisan key:generate --force" $SUDO_USER # &>> $LOGFILE
-#	su -c "php artisan storage:link" $SUDO_USER # &>> $LOGFILE
-#	su -c "php artisan ziggy:generate" $SUDO_USER # &>> $LOGFILE
+	su -c "php artisan key:generate --force" $SUDO_USER &>> $LOGFILE
+	su -c "php artisan storage:link" $SUDO_USER &>> $LOGFILE
+	su -c "php artisan ziggy:generate" $SUDO_USER &>> $LOGFILE
 	
 	#  Install NPM dependencies
-#	su -c "npm install --only=production" $SUDO_USER >> $LOGFILE
-#	su -c "npm run production" $SUDO_USER >> $LOGFILE
+	su -c "npm install --only=production" $SUDO_USER >> $LOGFILE
+	su -c "npm run production" $SUDO_USER >> $LOGFILE
 }
 
 #  Spinner to show while background processes are running
@@ -686,13 +709,20 @@ spin()
 		done
 	done
 }
-
+ 
 #  Start the spinner
 startSpin()
 {
 	spin &
 	SPIN_PID=$!
-	trap "kill -9 $SPIN_PID" `seq 0 15`
+#	trap "kill -9 $SPIN_PID" `seq 0 15`
+#	echo -en "\b "
+}
+
+#  Kill the spinner
+killSpin()
+{
+	kill -9 $SPIN_PID > /dev/null 2>&1
 	echo -en "\b "
 }
 

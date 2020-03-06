@@ -12,26 +12,27 @@ LOGFILE=$SCRIPTROOT/install.log
 minimumPHPVer=72;
 minimumPHPReadable=7.2
 
-#  Variables 
+#  Variables
 PREREQ=true
 MODULE=true
-MANUAL=false 
+MANUAL=false
 WASINS=false
-SPIN_PID=0 
+SPIN_PID=0
 BRANCH=null
- 
+
 #  File Locations
-WEBROOT=\/var\/www\/html 
+WEBROOT=\/var\/www\/html
 USEFILE=null
 
 #  Install Data Variables
 WebURL=localhost
 FullURL=https:\/\/localhost
-SSLOnly=true 
-DBName=techbench  
-DBUser=root  #  tbUser
+SSLOnly=true
+DBName=techbench
+DBUser=tbUser
 DBPass=null
-VIRDIR=true  
+VIRDIR=true
+DISVIR=true
 
 #  Verify the script is being run as root
 if [[ $EUID -ne 0 ]]; then
@@ -41,7 +42,7 @@ fi
 
 #  Touch the log file and make sure it can be writen to by both the sudo user and normal user
 touch $LOGFILE && chmod 777 $LOGFILE
-  
+
 #  Primary script
 main()
 {
@@ -50,33 +51,34 @@ main()
 	tput setaf 4
 	echo '##################################################################' | tee $LOGFILE
 	echo '#                                                                #' | tee -a $LOGFILE
-	echo '#                 Welcome to the Tech Bench Setup                #' 
+	echo '#                 Welcome to the Tech Bench Setup                #'
 	echo '#                   Tech Bench Installation Log                  #' >> $LOGFILE
 	echo '#                                                                #' | tee -a $LOGFILE
 	echo '##################################################################' | tee -a $LOGFILE
 	echo '' | tee -a $LOGFILE
 	tput sgr0
-	
+
 	printf 'Before we get started, lets gather some information from you'
 
 	#  Get the full URL of the Tech Bench site
 	printf '\n\nPlease enter the full url that will be used for the Tech Bench: \n'
-	printf '(ex. techbench.domain.com)\n' 
+	printf '(ex. techbench.domain.com)\n'
 	read -p "Enter URL [$WebURL]:  " WebURL2
 	echo ''
 	#  If input was blank, use default value
 	if [[ $WebURL2 != '' ]]; then
 		WebURL=$WebURL2
 	fi
+	#  Determine if we should only use https access
 	read -p 'Use HTTPS for Tech Bench Access (Recommended) [y/n]: ' SSLOnly
-	if [[ $SSLOnly =~ [Nn]$ ]]; then	
+	if [[ $SSLOnly =~ [Nn]$ ]]; then
 		SSLOnly=false
 	else
 		SSLOnly=true
 	fi
-	  
+
 	#  Additional questions if Manual installation is selected
-	if [[ $MANUAL == 'true' ]]; then	
+	if [[ $MANUAL == 'true' ]]; then
 		#  Root directory where PHP files are served from
 		echo ''
 		read -p 'What is the Web Server Root Directory where the Tech Bench files are loaded to? ['$WEBROOT']:  ' WEBROOT2
@@ -84,7 +86,7 @@ main()
 		if [[ $WEBROOT2 != '' ]]; then
 			WEBROOT=$WEBROOT2
 		fi
-		
+
 		#  Name of the database to use
 		echo ''
 		read -p 'Please enter the name of the database to hold the Tech Bench data ['$DBName']:  ' DBName2
@@ -92,7 +94,7 @@ main()
 		if [[ $DBName2 != '' ]]; then
 			DBName=$DBName2
 		fi
-		
+
 		#  Username and password to access database
 		while true; do
 			read -p 'Please enter the name of the database user:  ' DBUser
@@ -103,40 +105,49 @@ main()
 			fi
 
 			printf '\n\n Using the "root" database user can be very insecure.'
-			read -p 'Are you sure you want to continue with this database user? [y/n]'  cont  
+			read -p 'Are you sure you want to continue with this database user? [y/n]'  cont
 
 			if [[ $cont =~ ^[Yy]$ ]]; then
 				break
 			fi
 		done
-		
+
 		#  Ask if virtual directories are already built
 		echo ''
 		read -p 'Build custom virtual sites for Tech Bench (Recommended)? [Y/N]: ' VIRDIR
-		if [[ $VIRDIR =~ [Nn]$ ]]; then	
+		if [[ $VIRDIR =~ [Nn]$ ]]; then
 			VIRDIR=false
 		else
 			VIRDIR=true
 		fi
+		
+		#  Ask to disable any existing virtual directories
+		echo ''
+		read -p 'Disable any existing virtual directories? [Y/N]: ' DISVIR
+		if [[ $DISVIR =~ [Yy]$ ]]; then
+			DISVIR=true
+		else
+			DISVIR=false
+		fi
 	fi
-	
+
 	#  Set the full URL that will be used to access the website
 	if [ $SSLOnly == 'true' ]; then
 		FullURL=https:\\/\\/$WebURL
 	else
 		FullURL=http:\\/\\/$WebURL
 	fi
-	
+
 	#  Check prerequisites
 	printf '\nChecking Dependencies...\n\n' | tee -a $LOGFILE
 	checkPrereqs
 	printf '\n'
-	
+
 	#  If the prerequisites fail, the installer will terminate
 	if [ $PREREQ == 'false' ]; then
 		echo 'You are missing one or more dependencies'
 		echo 'These must be installed before we can continue installation process'
-		printf '\n\n'		
+		printf '\n\n'
 		exit 1
 	fi
 
@@ -149,22 +160,22 @@ main()
 	#  Determine which installation files to use and install them
 	checkPackage
 	installPackage
-	
+
 	#  Create new virtual directory files for the Tech Bench site
-	if [ $VIRDIR == 'true' ]; then 
+	if [ $VIRDIR == 'true' ]; then
 		writeConfFiles
 	fi
-	
+
 	setupApplication
-	
-	
+
+
 	#############################################
 	#############################################
 	#############################################
-	
-	
-	
-	
+
+
+
+
 
 	printf '\n\ndone\n\n'
 	exit 0
@@ -183,18 +194,18 @@ check()
 	MANUAL=true
 	clear
 	tput setaf 4
-	echo '##################################################################' 
-	echo '#                                                                #' 
-	echo '#                 Welcome to the Tech Bench Setup                #' 
-	echo '#                                                                #' 
-	echo '##################################################################' 
-	echo '' 
+	echo '##################################################################'
+	echo '#                                                                #'
+	echo '#                 Welcome to the Tech Bench Setup                #'
+	echo '#                                                                #'
+	echo '##################################################################'
+	echo ''
 	tput sgr0
-	
+
 	#  Check prerequisites
-	printf 'Checking Dependencies...\n\n' 
+	printf 'Checking Dependencies...\n\n'
 	checkPrereqs
-	
+
 	echo ''
 	if [ $PREREQ == 'true' ]; then
 		echo 'All dependencies are installed'
@@ -213,12 +224,12 @@ checkPrereqs()
 	checkApache
 	checkMysql
 	checkPHP
-	
+
 	#  Check proper modules are installed
 	if [ $PREREQ == 'true' ]; then
 		checkModules
 	fi
-	
+
 	#  Check third party software is installed for package management
 	checkComposer
 	checkNodeJS
@@ -244,8 +255,8 @@ checkApache()
 		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'LAMP Server Installed' >> $LOGFILE 2>&1
 		WASINS=true
-		killSpin
-    else	
+		killSpin 
+    else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
         PREREQ=false
@@ -264,7 +275,7 @@ checkMysql()
 		else
 			echo '[INSTALLED]' | tee -a $LOGFILE
 		fi
-    else	
+    else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
         PREREQ=false
@@ -303,8 +314,8 @@ checkModules()
 {
 	#  PHP-XML Module
 	printf 'PHP-XML Module                                              ' | tee -a $LOGFILE
-	XMLMod=$(php -m | grep -c dom) 
-	
+	XMLMod=$(php -m | grep -c dom)
+
 	if (( $XMLMod > 0 )); then
 		if [ $WASINS == 'false' ]; then
 			tput setaf 2
@@ -315,21 +326,21 @@ checkModules()
 	elif [ $MANUAL == 'false' ]; then
 		echo -en '[INSTALLING]'
 		startSpin
-		apt-get install php-dom -y >> $LOGFILE 2>&1
+		apt-get -q install php-dom -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo '[INSTALLED]' >> $LOGFILE 2>&1
-		killSpin
-    else	
+		killSpin 
+    else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
         PREREQ=false
     fi
     tput sgr0
-		
+
 	#  PHP-ZIP Module
 	printf 'PHP-ZIP Module                                              ' | tee -a $LOGFILE
 	ZIPMod=$(php -m | grep -c zip)
-	
+
 	if (( $ZIPMod > 0 )); then
 		tput setaf 2
             echo '[PASS]' | tee -a $LOGFILE
@@ -337,21 +348,21 @@ checkModules()
 		echo 'PHP-ZIP Module is not Installed.  Installing' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING]'
 		startSpin
-		apt-get install php-zip -y >> $LOGFILE 2>&1
+		apt-get -q install php-zip -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo 'PHP-ZIP Module Installed' >> $LOGFILE 2>&1
-		killSpin
-    else	
+		killSpin 
+    else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
         PREREQ=false
     fi
     tput sgr0
-		
+
 	#  PHP-GD Module
 	printf 'PHP-GD Module                                               ' | tee -a $LOGFILE
 	GDMod=$(php -m | grep -c gd)
-	
+
 	if (( $GDMod > 0 )); then
 		tput setaf 2
             echo '[PASS]' | tee -a $LOGFILE
@@ -359,11 +370,11 @@ checkModules()
 		echo 'PHP-GD Module is not Installed.  Installing' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING]'
 		startSpin
-		apt-get install php-gd -y >> $LOGFILE 2>&1
+		apt-get -q install php-gd -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo 'PHP-GD Module Installed' >> $LOGFILE 2>&1
 		killSpin
-    else	
+    else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
         PREREQ=false
@@ -381,9 +392,11 @@ checkComposer()
 		if [ $MANUAL == 'false' ]; then
 			echo 'Composer is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
-			apt-get install composer -y >> $LOGFILE 2>&1
+			startSpin
+			apt-get -q install composer -y >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
 			echo 'Composer Installed' >> $LOGFILE 2>&1
+			killSpin
 		else
 			tput setaf 1
 			echo '[FAIL]' | tee -a $LOGFILE
@@ -406,9 +419,11 @@ checkNodeJS()
 		if [ $MANUAL == 'false' ]; then
 		echo 'NodeJS is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
-			apt-get install nodejs -y >> $LOGFILE 2>&1
+			startSpin
+			apt-get -q install nodejs -y >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
 			echo 'NodeJS Installed' >> $LOGFILE 2>&1
+			killSpin
 		else
 			tput setaf 1
 			echo '[FAIL]' | tee -a $LOGFILE
@@ -420,7 +435,7 @@ checkNodeJS()
 	fi
 	tput sgr0
 }
-
+ 
 #  Check if NPM is installed
 checkNPM()
 {
@@ -431,11 +446,13 @@ checkNPM()
 		if [ $MANUAL == 'false' ]; then
 			echo 'NPM is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
+			startSpin
 #			apt-get install npm -y >> $LOGFILE 2>&1
 			mkdir npm && cd npm/
-			curl https://www.npmjs.com/install.sh | sh
+			curl -s https://www.npmjs.com/install.sh | sh  >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
 			echo 'NPM Installed' >> $LOGFILE 2>&1
+			killSpin
 		else
 			tput setaf 1
 			echo '[FAIL]' | tee -a $LOGFILE
@@ -475,9 +492,11 @@ checkSupervisor()
 		if [ $MANUAL == 'false' ]; then
 			echo 'Supervisor is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
+			startSpin
 			apt-get install supervisor -y >> $LOGFILE 2>&1
-			echo -ne '\b\b\b\bED]      \n'
+			echo -ne '\b\b\b\bED]      \n\n'
 			echo 'Supervisor Installed' >> $LOGFILE 2>&1
+			killSpin
 		else
 			tput setaf 1
 			echo '[FAIL]' | tee -a $LOGFILE
@@ -489,7 +508,7 @@ checkSupervisor()
 	fi
 	tput sgr0
 }
-
+ 
 #  Check for the proper installation package
 checkPackage()
 {
@@ -499,7 +518,7 @@ checkPackage()
 
 	if [ "$BRANCH" != 'null' ]; then
 		echo 'Downloading Branch '$BRANCH
-		
+		startSpin
 		USEFILE=Tech_Bench_$BRANCH.zip
 		RESPONSE=$(wget --server-response -O $USEFILE https://api.github.com/repos/butcherman/tech_bench/zipball/$BRANCH 2>&1 | awk '/^  HTTP/{print $2}')
 		CODES=($RESPONSE)
@@ -510,12 +529,14 @@ checkPackage()
 			tput sgr0
 			exit 1
 		fi
+		killSpin
 	elif [ $LISTLEN == 0 ]; then
 		echo 'Downloading latest Tech Bench release'
 		startSpin
 		USEFILE=Tech_Bench_latest.zip
 		GETURL=$(curl -s https://api.github.com/repos/butcherman/tech_bench/releases/latest | grep zipball_url | cut -d : -f 2,3 | tr -d \" | tr -d \,)
 		wget -O $USEFILE $GETURL > /dev/null 2>&1
+		killSpin 
 	elif [ $LISTLEN -ne 1 ]; then
 		while true; do
 			echo 'Please select the Tech Bench installation package to install'
@@ -527,7 +548,7 @@ checkPackage()
 			done
 			echo ''
 			read -p 'Please select 0 through '$LISTLEN' [0]:  ' USEINDEX
-			
+
 			if [[ ! $USEINDEX =~ ^[+-]?[0-9]+$ ]]; then
 				echo 'Numbers Only Please'
 			elif [[ $USEINDEX -le $LISTLEN ]]; then
@@ -539,7 +560,11 @@ checkPackage()
 		USEFILE=${FILELIST[0]}
 	fi
 	
-	echo 'Using '$USEFILE' as installation package'
+	printf 'Using '
+	tput setaf 2
+	printf $USEFILE
+	tput sgr0
+	printf ' as installation package\n\n'
 }
 
 #  Move the installation files to the WebRoot directory
@@ -550,50 +575,45 @@ installPackage()
 
 	#  Unzip installation files
 	echo 'Extracting Files'
+	startSpin
 	DIRNAME=$(zipinfo -1 $USEFILE | grep -o "^[^/]\+[/]" | sort -u | tr -d \/)
 	unzip -o $USEFILE >> $LOGFILE
-	
-	#  Empty any existing files out of the Web Root directory 
-	find $WEBROOT/ -type f -delete
-	
+
+	#  Empty any existing files out of the Web Root directory
+	find $WEBROOT/ -type f -delete > /dev/null 2>&1
+	find $WEBROOT/* -type d -delete > /dev/null 2>&1
+	find $WEBROOT/node_modules -delete > /dev/null 2>&1
+	find $WEBROOT/vendor -delete > /dev/null 2>&1
+
 	#  Move files to web root directory
 	cp -r $DIRNAME/* $WEBROOT
 	cp -r $DIRNAME/.htaccess $WEBROOT/.htaccess
 	cp -r $DIRNAME/.env.example $WEBROOT/.env
-	
-	
 
-	#  Set file permissions and owner
-#	chown -R www-data:www-data $WEBROOT
-#	find $WEBROOT -type f -exec chmod 644 {} \; >> $LOGFILE
-#	find $WEBROOT -type d -exec chmod 755 {} \; >> $LOGFILE
-	
 	#  Create the folders for the dependencies
 	mkdir $WEBROOT/vendor $WEBROOT/node_modules
-	chown www-data:www-data $WEBROOT/vendor $WEBROOT/node_modules
-#	chmod 775 -R $WEBROOT/vendor $WEBROOT/node_modules $WEBROOT/storage
+	chmod 777 -R $WEBROOT/*
 
-	#  For the installation process, set all permissions to 777 (note - this is only temporary)
-	chmod 777 -R $WEBROOT
-	chmod 777 $WEBROOT/.env
-	
 	#  If the installer is not being done manually, generate a password for the database user
 #	if [ $MANUAL == 'false' ]; then
 #		DBPass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
 #	fi
-	
+
 	#  Write the configuration settings to the .env file
 	sed -i "s/APP_URL=http:\/\/localhost/APP_URL=$FullURL/g" $WEBROOT/.env
 	sed -i "s/DB_DATABASE=tech-bench/DB_DATABASE=$DBName/g" $WEBROOT/.env
 	sed -i "s/DB_USERNAME=root/DB_USERNAME=root/g" $WEBROOT/.env        #  $DBUser/g" $WEBROOT/.env
 	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$DBPass/g" $WEBROOT/.env
+	
+	killSpin
 }
-
+ 
 #  Write new apache config files
 writeConfFiles()
 {
 	echo 'Creating Apache Virtual Directories'
-	
+	startSpin
+
 	#  Disable any existing sites on the server
 	ENABLEDSITES=(`ls /etc/apache2/sites-enabled`)
 	ENABLEDLENGTH=${#ENABLEDSITES[*]}
@@ -604,7 +624,7 @@ writeConfFiles()
 			let i++
 		done
 	fi
-	
+
 	#  Create the new http site
 	touch /etc/apache2/sites-available/TechBench.conf
 	echo '<VirtualHost *:80>' > /etc/apache2/sites-available/TechBench.conf
@@ -628,7 +648,7 @@ writeConfFiles()
 		echo '' >> /etc/apache2/sites-available/TechBench.conf
 	fi
 	echo '</VirtualHost>' >> /etc/apache2/sites-available/TechBench.conf
-	
+
 	#  Create the new https site
 	touch /etc/apache2/sites-available/SSLTechBench.conf
 	echo '<IfModule mod_ssl.c>' > /etc/apache2/sites-available/SSLTechBench.conf
@@ -656,44 +676,58 @@ writeConfFiles()
 	echo '		</Directory>' >> /etc/apache2/sites-available/SSLTechBench.conf
 	echo '	</VirtualHost>' >> /etc/apache2/sites-available/SSLTechBench.conf
 	echo '</IfModule>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	
+
 	#  Enable the necessary modules
 	a2enmod rewrite ssl >> $LOGFILE
-	
+
 	#  Enable the new sites
 	a2ensite TechBench.conf SSLTechBench.conf >> $LOGFILE
-	
+
 	#  Restart Apache
-	systemctl reload apache2 >> $LOGFILE 
+	systemctl reload apache2 >> $LOGFILE
+	
+	killSpin
 }
 
 #  Download all dependencies from composer and NPM and setup application
 setupApplication()
 {
-	echo 'Creating Tech Bench Application'  
+	echo 'Creating Tech Bench Application'
+	startSpin
 	#  If the installer is not being done manually, create the database and database user
-#	if [ $MANUAL == 'false' ]; then
-#		mysql --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DBPASS';"     #  TMP work around for information_schema issues
-#		mysql -u root -p$DBPASS --execute="CREATE DATABASE IF NOT EXISTS \`$DBName\`;"
-#		mysql --execute="CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED WITH mysql_native_password BY '$DBPass';"
-#		mysql --execute="GRANT ALL PRIVILEGES ON \`$DBName\`.* TO '$DBUser'@'localhost' WITH GRANT OPTION;"
-#		mysql --execute="GRANT SELECT ON \`information_schema\`.* TO '$DBUser'@'localhost';"
-#		
-#		mysql --execute="UPDATE mysql.user SET Password=PASSWORD('$DBPASS') WHERE USER='root'";
-#		mysql --execute="FLUSH PRIVILEGES;"
-#	fi
-	  
+	if [ $MANUAL == 'false' ]; then
+		mysql <<SCRIPT
+			ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DBPASS';
+			CREATE DATABASE IF NOT EXISTS \`$DBName\`;
+			CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED WITH mysql_native_password BY '$DBPass';
+			GRANT ALL PRIVILEGES ON \`$DBName\`.* TO '$DBUser'@'localhost' WITH GRANT OPTION;
+#			GRANT SELECT ON \`information_schema\`.* TO '$DBUser'@'localhost';
+			FLUSH PRIVILEGES;
+SCRIPT
+	fi
+
 	#  Install composer dependencies
 	cd $WEBROOT
 	su -c "composer install --no-dev --no-interaction --optimize-autoloader" $SUDO_USER &>> $LOGFILE
 	su -c "php artisan key:generate --force" $SUDO_USER &>> $LOGFILE
 	su -c "php artisan storage:link" $SUDO_USER &>> $LOGFILE
 	su -c "php artisan ziggy:generate" $SUDO_USER &>> $LOGFILE
-	
+
 	#  Install NPM dependencies
-	su -c "npm install --only=production" $SUDO_USER >> $LOGFILE
-	su -c "npm run production" $SUDO_USER >> $LOGFILE
-}
+	su -c "npm install --silent cross-env" $SUDO_USER &>> $LOGFILE 
+	su -c "npm install --silent --only=production" $SUDO_USER &>> $LOGFILE 
+	su -c "npm run production" $SUDO_USER &>> $LOGFILE
+	
+	#  Setup DATABASE
+	su -c "php artisan migrate --force" $SUDO_USER &>> $LOGFILE
+	
+	#  Cache Files
+	su -c "php artisan config:cache" $SUDO_USER &>> $LOGFILE
+	su -c "php artisan route:cache" $SUDO_USER &>> $LOGFILE
+
+	killSpin
+	
+} 
 
 #  Spinner to show while background processes are running
 spin()
@@ -703,26 +737,25 @@ spin()
 	do
 		for i in `seq 0 7`
 		do
-			echo -n "${spinner:$i:1}" 
+			echo -n "${spinner:$i:1}"
 			echo -en "\010"
 			sleep 1
 		done
 	done
 }
- 
+
 #  Start the spinner
 startSpin()
 {
 	spin &
 	SPIN_PID=$!
-#	trap "kill -9 $SPIN_PID" `seq 0 15`
-#	echo -en "\b "
 }
 
 #  Kill the spinner
 killSpin()
 {
 	kill -9 $SPIN_PID > /dev/null 2>&1
+	wait $! > /dev/null 2>&1
 	echo -en "\b "
 }
 
@@ -735,7 +768,7 @@ while [ "$1" != "" ]; do
 		-b | --branch ) shift
 						BRANCH=$1
 						;;
-		-c | --check )	shift	
+		-c | --check )	shift
 						check
 						exit 0
 						;;
@@ -744,7 +777,7 @@ while [ "$1" != "" ]; do
 						exit 0
 						;;
 		* )				main
-						exit 0			
+						exit 0
 	esac
 	shift
 done

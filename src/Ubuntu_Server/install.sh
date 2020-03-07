@@ -112,7 +112,7 @@ main()
 				break
 			fi
 		done
-		
+
 		#  Get the root password for the database
 		if [ $DBUser != 'root' ]; then
 			echo 'For the database installation, we will need to get the password of the root user'
@@ -129,7 +129,7 @@ main()
 		else
 			VIRDIR=true
 		fi
-		
+
 		#  Ask to disable any existing virtual directories
 		echo ''
 		read -p 'Disable any existing virtual directories? [Y/N]: ' DISVIR
@@ -143,8 +143,10 @@ main()
 	#  Set the full URL that will be used to access the website
 	if [ $SSLOnly == 'true' ]; then
 		FullURL=https:\\/\\/$WebURL
+		WebLink=https:\/\/$WebURL
 	else
 		FullURL=http:\\/\\/$WebURL
+		WebLink=http:\/\/$WebURL
 	fi
 
 	#  Check prerequisites
@@ -165,7 +167,7 @@ main()
 	echo 'Lets continue'
 	printf '\n'
 	tput sgr0
-	
+
 	#  Determine which installation files to use and install them
 	checkPackage
 	installPackage
@@ -178,6 +180,8 @@ main()
 	setupApplication
 	cleanup
 
+	FullURL=$($FullURL -tr -d \ )
+
 	clear
 	tput setaf 4
 	echo '##################################################################'
@@ -187,16 +191,16 @@ main()
 	echo '##################################################################'
 	echo ''
 	tput sgr0
-	echo "Visit $FullURL and login with the default credentials of:"
+	echo "Visit $WebLink and login with the default credentials of:"
 	echo "     Username:  admin"
 	echo "     Password:  password"
 	echo "to start using the Tech Bench."
 	echo ''
 	echo "The full installation log can be found at $WEBROOT/storage/logs/Tech_Bench_Install.log"
 	echo ''
-	
+
 	exit 0
-} 
+}
 
 help()
 {
@@ -272,7 +276,7 @@ checkApache()
 		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'LAMP Server Installed' >> $LOGFILE 2>&1
 		WASINS=true
-		killSpin 
+		killSpin
     else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -346,7 +350,7 @@ checkModules()
 		apt-get -q install php-dom -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo '[INSTALLED]' >> $LOGFILE 2>&1
-		killSpin 
+		killSpin
     else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -368,7 +372,7 @@ checkModules()
 		apt-get -q install php-zip -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo 'PHP-ZIP Module Installed' >> $LOGFILE 2>&1
-		killSpin 
+		killSpin
     else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -452,7 +456,7 @@ checkNodeJS()
 	fi
 	tput sgr0
 }
- 
+
 #  Check if NPM is installed
 checkNPM()
 {
@@ -524,7 +528,7 @@ checkSupervisor()
 	fi
 	tput sgr0
 }
- 
+
 #  Check for the proper installation package
 checkPackage()
 {
@@ -552,7 +556,7 @@ checkPackage()
 		USEFILE=Tech_Bench_latest.zip
 		GETURL=$(curl -s https://api.github.com/repos/butcherman/tech_bench/releases/latest | grep zipball_url | cut -d : -f 2,3 | tr -d \" | tr -d \,)
 		wget -O $USEFILE $GETURL > /dev/null 2>&1
-		killSpin 
+		killSpin
 	elif [ $LISTLEN -ne 1 ]; then
 		while true; do
 			echo 'Please select the Tech Bench installation package to install'
@@ -575,7 +579,7 @@ checkPackage()
 	else
 		USEFILE=${FILELIST[0]}
 	fi
-	
+
 	printf 'Using '
 	tput setaf 2
 	printf $USEFILE
@@ -622,10 +626,10 @@ installPackage()
 	sed -i "s/DB_DATABASE=tech-bench/DB_DATABASE=$DBName/g" $WEBROOT/.env
 	sed -i "s/DB_USERNAME=root/DB_USERNAME=root/g" $WEBROOT/.env        #  $DBUser/g" $WEBROOT/.env
 	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$ROOTPass/g" $WEBROOT/.env
-	
+
 	killSpin
 }
- 
+
 #  Write new apache config files
 writeConfFiles()
 {
@@ -703,7 +707,7 @@ writeConfFiles()
 
 	#  Restart Apache
 	systemctl reload apache2 >> $LOGFILE
-	
+
 	killSpin
 }
 
@@ -724,7 +728,7 @@ setupApplication()
 			FLUSH PRIVILEGES;
 SCRIPT
 	fi
- 
+
 	#  Install composer dependencies
 	cd $WEBROOT
 	su -c "composer install --no-dev --no-interaction --optimize-autoloader" $SUDO_USER &>> $LOGFILE
@@ -733,45 +737,45 @@ SCRIPT
 	su -c "php artisan ziggy:generate" $SUDO_USER &>> $LOGFILE
 
 	#  Install NPM dependencies
-	su -c "npm install --silent cross-env" $SUDO_USER &>> $LOGFILE 
-	su -c "npm install --silent --only=production" $SUDO_USER &>> $LOGFILE 
+	su -c "npm install --silent cross-env" $SUDO_USER &>> $LOGFILE
+	su -c "npm install --silent --only=production" $SUDO_USER &>> $LOGFILE
 	su -c "npm run production" $SUDO_USER &>> $LOGFILE
-	
+
 	#  Setup DATABASE
 	su -c "php artisan migrate --force" $SUDO_USER &>> $LOGFILE
-	
+
 	#  Cache Files
 	su -c "php artisan config:cache" $SUDO_USER &>> $LOGFILE
 	su -c "php artisan route:cache" $SUDO_USER &>> $LOGFILE
 
 	killSpin
-} 
+}
 
 cleanup()
 {
 	printf 'Cleaning Up '
 	startSpin
-	
+
 	#  Update the .env file to use the proper user for the database access
 	sed -i "s/DB_USERNAME=root/DB_USERNAME=$DBUser/g" $WEBROOT/.env
 	sed -i "s/DB_PASSWORD=$ROOTPass/DB_PASSWORD=$DBPASS/g" $WEBROOT/.env
-	
+
 	#  Set file permissions and owner
 	chown -R www-data:www-data $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
 	find $WEBROOT -type f -exec chmod 644 {} \; >> $LOGFILE
 	find $WEBROOT -type d -exec chmod 755 {} \; >> $LOGFILE
-	
+
 	#  Lock down the config file and .htaccess
 	chmod 600 $WEBROOT/.env >> $LOGFILE
 	chmod 500 $WEBROOT/.htaccess >> $LOGFILE
-	
+
 	#  Delete the files created by the installer
 	find $SCRIPTROOT/$USEFILE --delete >> $LOGFILE
 	find $SCRIPTROOT/npm --delete >> $LOGFILE
-	
+
 	#  Move the installer log into the storage/logs directory
 	mv $LOGFILE $WEBROOT/storage/logs/Tech_Bench_Install.log
-	
+
 	killSpin
 }
 

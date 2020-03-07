@@ -11,27 +11,40 @@ Before the installation can begin, the following requirements must be met:
 ## Installing Tech Bech
 
 * Download the attached `install.sh` script to the Ubuntu server
-* Download the latest Tech Bench release and place in the same directory as the installation script
-Note:  Leave the files in zipped format.  They will be extraced by the installation script.
+* If you wish to install a specific Tech Bench installation package, place the zipped installation files in the same directory as the install script
 
-Navigate to the folder containing the installation script.  To completely automate the process and have the script take care of all prerequisites, run the following command:
+***Note:***  Leave the files in zipped format.  They will be extraced by the installation script.
 
-    ./install.sh 
+Navigate to the folder containing the installation script.  To completely automate the process and have the script take care of all prerequisites, run the following commands:
+
+    sudo chmod +x install.sh
+    sudo ./install.sh 
 
 If your Ubuntu installation is not a standard default installation, you can run the installer with the `-m` or `--manual` arguments.  If you chose to run the installer this way, the installer will fail if any prerequisites are not met.  
 
-
-
-
-
-
-
-
-
 During the installation process, the following information will be required:
-* The full URL that will be used to access the Tech Bench Application (example: https://techbench.demo)
 
-For a manual installation, the following additional information will be needed:
+* The full URL that will be used to access the Tech Bench Application (example: techbench.demo)
+
+***Note:***  Do not include the http or https in the URL
+
+* If you would like to use http or https access for the Tech Bench website
+
+If you opt for a manual installation, the following additional information will be needed:
+
 * The Root Directory the web files are served from (Default is /var/www/html) 
-* The name of the Database that will be used to store the Tech Bench data (note:  the database will be created if it does not already exist)
+* The name of the Database that will be used to store the Tech Bench data (note:  this database must already exist)
 * The username and password of the user that will be used by the Tech Bench to access the Tech Bench database
+* The password of the 'root' MySQL user
+* If you would like to remove any existing virtual apache sites and create new sites specifically for the Tech Bench
+
+***Note:*** If you select No, you must make sure that Apache Rewrite is enabled and working on your server.  If you select Yes, any existing virtual sites will be disabled.
+
+## After Installation is Completed
+
+Log into the Tech Bench by browsing to the URL of the Tech Bench server, and use the following credentials for default access:
+
+Username:  admin
+Password:  password
+
+The installation log can be found in the storage/logs folder of the Web Root directory.  You can access this manually in the server, or in the Tech Bench by going to Administration->Logs

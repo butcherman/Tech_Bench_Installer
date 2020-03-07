@@ -7,7 +7,7 @@
 
 #  Log File Location
 SCRIPTROOT=$(pwd)
-LOGFILE=$SCRIPTROOT/install.log
+LOGFILE=$SCRIPTROOT/TB_Install.log
 #  Minimum PHP Version Required to run Tech Bench
 minimumPHPVer=72;
 minimumPHPReadable=7.2
@@ -31,6 +31,7 @@ SSLOnly=true
 DBName=techbench
 DBUser=tbUser
 DBPass=null
+ROOTPass=null
 VIRDIR=true
 DISVIR=true
 
@@ -104,13 +105,21 @@ main()
 				break
 			fi
 
-			printf '\n\n Using the "root" database user can be very insecure.'
+			printf '\n\n Using the "root" user as the primary Tech Bench Database User can be very insecure.'
 			read -p 'Are you sure you want to continue with this database user? [y/n]'  cont
 
 			if [[ $cont =~ ^[Yy]$ ]]; then
 				break
 			fi
 		done
+		
+		#  Get the root password for the database
+		if [ $DBUser != 'root' ]; then
+			echo 'For the database installation, we will need to get the password of the root user'
+			read -p 'Please enter the password for the MySQL root user: ' ROOTPass
+		else
+			ROOTPass=$DBPASS
+		fi
 
 		#  Ask if virtual directories are already built
 		echo ''
@@ -167,19 +176,27 @@ main()
 	fi
 
 	setupApplication
+	cleanup
 
-
-	#############################################
-	#############################################
-	#############################################
-
-
-
-
-
-	printf '\n\ndone\n\n'
+	clear
+	tput setaf 4
+	echo '##################################################################'
+	echo '#                                                                #'
+	echo '#                    Tech Bench Setup Complete                   #'
+	echo '#                                                                #'
+	echo '##################################################################'
+	echo ''
+	tput sgr0
+	echo "Visit $FullURL and login with the default credentials of:"
+	echo "     Username:  admin"
+	echo "     Password:  password"
+	echo "to start using the Tech Bench."
+	echo ''
+	echo "The full installation log can be found at $WEBROOT/storage/logs/Tech_Bench_Install.log"
+	echo ''
+	
 	exit 0
-}
+} 
 
 help()
 {
@@ -447,7 +464,6 @@ checkNPM()
 			echo 'NPM is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
 			startSpin
-#			apt-get install npm -y >> $LOGFILE 2>&1
 			mkdir npm && cd npm/
 			curl -s https://www.npmjs.com/install.sh | sh  >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
@@ -593,17 +609,19 @@ installPackage()
 	#  Create the folders for the dependencies
 	mkdir $WEBROOT/vendor $WEBROOT/node_modules
 	chmod 777 -R $WEBROOT/*
+	chmod 777 $WEBROOT/.env
 
 	#  If the installer is not being done manually, generate a password for the database user
-#	if [ $MANUAL == 'false' ]; then
-#		DBPass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-#	fi
+	if [ $MANUAL == 'false' ]; then
+		DBPass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+		ROOTPass=$DBPASS
+	fi
 
 	#  Write the configuration settings to the .env file
 	sed -i "s/APP_URL=http:\/\/localhost/APP_URL=$FullURL/g" $WEBROOT/.env
 	sed -i "s/DB_DATABASE=tech-bench/DB_DATABASE=$DBName/g" $WEBROOT/.env
 	sed -i "s/DB_USERNAME=root/DB_USERNAME=root/g" $WEBROOT/.env        #  $DBUser/g" $WEBROOT/.env
-	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$DBPass/g" $WEBROOT/.env
+	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$ROOTPass/g" $WEBROOT/.env
 	
 	killSpin
 }
@@ -692,11 +710,12 @@ writeConfFiles()
 #  Download all dependencies from composer and NPM and setup application
 setupApplication()
 {
-	echo 'Creating Tech Bench Application'
+	printf 'Creating Tech Bench Application '
 	startSpin
 	#  If the installer is not being done manually, create the database and database user
 	if [ $MANUAL == 'false' ]; then
 		mysql <<SCRIPT
+			ALTER USER 'root'@'localhost' IDENTIFIED BY '$DBPASS';
 			ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DBPASS';
 			CREATE DATABASE IF NOT EXISTS \`$DBName\`;
 			CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED WITH mysql_native_password BY '$DBPass';
@@ -705,7 +724,7 @@ setupApplication()
 			FLUSH PRIVILEGES;
 SCRIPT
 	fi
-
+ 
 	#  Install composer dependencies
 	cd $WEBROOT
 	su -c "composer install --no-dev --no-interaction --optimize-autoloader" $SUDO_USER &>> $LOGFILE
@@ -726,8 +745,35 @@ SCRIPT
 	su -c "php artisan route:cache" $SUDO_USER &>> $LOGFILE
 
 	killSpin
-	
 } 
+
+cleanup()
+{
+	printf 'Cleaning Up '
+	startSpin
+	
+	#  Update the .env file to use the proper user for the database access
+	sed -i "s/DB_USERNAME=root/DB_USERNAME=$DBUser/g" $WEBROOT/.env
+	sed -i "s/DB_PASSWORD=$ROOTPass/DB_PASSWORD=$DBPASS/g" $WEBROOT/.env
+	
+	#  Set file permissions and owner
+	chown -R www-data:www-data $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
+	find $WEBROOT -type f -exec chmod 644 {} \; >> $LOGFILE
+	find $WEBROOT -type d -exec chmod 755 {} \; >> $LOGFILE
+	
+	#  Lock down the config file and .htaccess
+	chmod 600 $WEBROOT/.env >> $LOGFILE
+	chmod 500 $WEBROOT/.htaccess >> $LOGFILE
+	
+	#  Delete the files created by the installer
+	find $SCRIPTROOT/$USEFILE --delete >> $LOGFILE
+	find $SCRIPTROOT/npm --delete >> $LOGFILE
+	
+	#  Move the installer log into the storage/logs directory
+	mv $LOGFILE $WEBROOT/storage/logs/Tech_Bench_Install.log
+	
+	killSpin
+}
 
 #  Spinner to show while background processes are running
 spin()

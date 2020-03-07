@@ -17,7 +17,7 @@ Before the installation can begin, the following requirements must be met:
 
 If you wish, you can copy and paste the command below to use curl to download the script directly from Github
 
-    curl-s https://raw.githubusercontent.com/butcherman/Tech_Bench_Installer/master/src/Ubuntu_Server/install.sh -o install.sh
+    curl -s https://raw.githubusercontent.com/butcherman/Tech_Bench_Installer/master/src/Ubuntu_Server/install.sh -o install.sh
 
 Navigate to the folder containing the installation script.  To completely automate the process and have the script take care of all prerequisites, run the following commands:
 
@@ -48,7 +48,9 @@ If you opt for a manual installation, the following additional information will 
 
 Log into the Tech Bench by browsing to the URL of the Tech Bench server, and use the following credentials for default access:
 
-Username:  admin
-Password:  password
+    Username:  admin
+    Password:  password
 
 The installation log can be found in the storage/logs folder of the Web Root directory.  You can access this manually in the server, or in the Tech Bench by going to Administration->Logs
+
+Refer to the [Tech Bench Documentation](https://tech-bench.readthedocs.io/en/latest/) for more information on configuring the Tech Bench settings and using the Tech Bench.

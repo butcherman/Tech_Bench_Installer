@@ -5,9 +5,6 @@
 #                                                                              #
 ################################################################################
 
-#  Log File Location
-SCRIPTROOT=$(pwd)
-LOGFILE=$SCRIPTROOT/TB_Install.log
 #  Minimum PHP Version Required to run Tech Bench
 minimumPHPVer=72;
 minimumPHPReadable=7.2
@@ -20,9 +17,13 @@ WASINS=false
 SPIN_PID=0
 BRANCH=null
 
-#  File Locations
+#  File Locations 
+SCRIPTROOT=$(pwd)
+LOGFILE=$SCRIPTROOT/TB_Install.log
 WEBROOT=\/var\/www\/html
 USEFILE=null
+WORKERFILE=/etc/supervisor/conf.d/laravel-worker.conf
+CRONFILE=/etc/cron.d/laravel-jobs
 
 #  Install Data Variables
 WebURL=localhost
@@ -177,11 +178,12 @@ main()
 		writeConfFiles
 	fi
 
+	#  Load dependencies and build application files
 	setupApplication
 	cleanup
 
+	#  Installation finished
 	FullURL=$($FullURL -tr -d \ )
-
 	clear
 	tput setaf 4
 	echo '##################################################################'
@@ -204,15 +206,41 @@ main()
 
 help()
 {
-	echo 'help menu'
-	#  TODO - Create a help menu
+	echo '                             Tech Bench Installer Help'
+	echo ''
+	echo 'By default the Tech Bench installer will download the latest Tech Bench installation files and install '
+	echo 'them to the default apache web server location (/var/ww/html)'
+	echo ''
+	echo 'The following arguments can be used for assistance:'
+	echo ''
+	echo '-m or --manual               - Run a manual installation that will not override any existing settings '
+	echo '                               Use this option if you want to do a custom installation of the Tech Bench'
+	echo ''
+	echo '-b or --branch <branch name> - Select the specific Tech Bench Git Hub branch to use as the Tech Bench'
+	echo '                               installation package.'
+	echo '                               Use this option if you want to install a custom version of the Tech Bench'
+	echo ''
+	echo '-c or --check                - Check to see if the prerequisites are installed'
+	echo '                               The Tech Bench install will not install any files, only check if the required'
+	echo '                               prerequisites are installed and running on the server'
+	echo '                               If you wish to install the prerequisites during the check, pass along the \"true\"'
+	echo '                               flag with the --check argument'
+	echo '                               Example:  ./install.sh --check true'
+	echo ''
+	echo '-h or --help                 - Display this help menu'
+	echo ''
 }
 
 #  Only run the prerequisite check and exit
 check()
 {
 	LOGFILE=\/dev\/null
-	MANUAL=true
+	if [ $INSTALL == 't' ] || [ $INSTALL == 'true' ]; then 
+		MANUAL=false
+	else
+		MANUAL=true
+	fi
+	
 	clear
 	tput setaf 4
 	echo '##################################################################'
@@ -257,6 +285,11 @@ checkPrereqs()
 	checkNPM
 	checkUnzip
 	checkSupervisor
+	
+	#  Restart Apache if the prerequisites were installed
+	if [ $MANUAL == 'false' ]; then
+		systemctl reload apache2 >> $LOGFILE
+	fi
 }
 
 #  Check Apache is installed and running
@@ -273,6 +306,11 @@ checkApache()
 		startSpin
 		apt-get -q update >> $LOGFILE
 		apt-get -q install lamp-server^ -y >> $LOGFILE 2>&1
+		
+		#  Get the location of the php.ini file and update the upload_max_filesize paramater
+		PHPINI=$(php -i | grep php.ini | head -n 1 | cut -d " " -f 6)
+		sed -i 's,^upload_max_filesize =.*$,post_max_size = 6M,' $PHPINI/php.ini
+		
 		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'LAMP Server Installed' >> $LOGFILE 2>&1
 		WASINS=true
@@ -283,7 +321,7 @@ checkApache()
         PREREQ=false
     fi
     tput sgr0
-}
+} 
 
 #  Check if MySQL is installed and running
 checkMysql()
@@ -727,7 +765,7 @@ setupApplication()
 #			GRANT SELECT ON \`information_schema\`.* TO '$DBUser'@'localhost';
 			FLUSH PRIVILEGES;
 SCRIPT
-	fi
+	fi 
 
 	#  Install composer dependencies
 	cd $WEBROOT
@@ -748,12 +786,38 @@ SCRIPT
 	su -c "php artisan config:cache" $SUDO_USER &>> $LOGFILE
 	su -c "php artisan route:cache" $SUDO_USER &>> $LOGFILE
 
+	# Setup Supervisor service to work email queue
+	touch $WORKERFILE
+	echo "#  The laravel-worker program will ensure the queue:work command " >> $WORKERFILE
+	echo "#  is constantly running." >> $WORKERFILE
+	echo "" >> $WORKERFILE
+	echo "[program:laravel-worker]" >> $WORKERFILE
+	echo "process_name=%(program_name)s_%(process_num)02d" >> $WORKERFILE
+	echo "command=php $WEBROOT/artisan queue:work --sleep=3 --tries=3" >> $WORKERFILE
+	echo "autostart=true" >> $WORKERFILE
+	echo "autorestart=true" >> $WORKERFILE
+	echo "user=www-data" >> $WORKERFILE
+	echo "numprocs=8" >> $WORKERFILE
+	echo "redirect_stderr=true" >> $WORKERFILE
+	echo "stdout_logfile=$WEBROOT/storage/logs/worker.log" >> $WORKERFILE
+	
+	# Start the Supervisor service
+	supervisorctl reread >> $LOGFILE
+	supervisorctl update >> $LOGFILE
+	supervisorctl start laravel-worker:* >> $LOGFILE
+
+	# Setup the cron file for all Scheduled Tasks performed by the Tech Bench
+	touch $CRONFILE
+	echo "#  The laravel-jobs cron job is to run any scheduled tasks performed by the Tech Bench" >> $CRONFILE
+	echo "" >> $CRONFILE
+	echo "* * * * * cd $WEBROOT && php artisan schedule:run >> /dev/null 2>&1" >> $CRONFILE
+
 	killSpin
-}
+} 
 
 cleanup()
 {
-	printf 'Cleaning Up '
+	printf '\nCleaning Up '
 	startSpin
 
 	#  Update the .env file to use the proper user for the database access
@@ -819,6 +883,7 @@ while [ "$1" != "" ]; do
 						BRANCH=$1
 						;;
 		-c | --check )	shift
+						INSTALL=$1
 						check
 						exit 0
 						;;

@@ -2,28 +2,27 @@
 
 This repository is designed to hold scripts to assist in automating the Tech Bench installation.  Select the option that best fits your installation environment and follow the instructions for installation.
 
-
-
 ## Requirements
 
 The following requirements must be met in order for Tech Bench to install and run properly
-*  Web application server (Apache currently supported)
-*  PHP 7.2 or higher
-*  MySQL Database Server
-*  Composer Dependency Manager
-*  Node.js and Node Package Manager (NPM)
-*  PHP Unzip Module
 
-It is highly recommended, although not required that the Tech Bench is run using HTTPS with a valid SSL Certificate.  
+* Web application server (Apache currently supported)
+* PHP 7.2 or higher
+* MySQL Database Server
+* Composer Dependency Manager
+* Node.js and Node Package Manager (NPM)
+* PHP Unzip Module
+
+It is highly recommended, although not required that the Tech Bench is run using HTTPS with a valid SSL Certificate.
 
 ## Installation Instructions
-*  [Manual Installation](src/Manual_Installation/Instructions.md)
-*  [Ubuntu 19.10 and higher](src/Ubuntu_Server/Instructions.md)
 
+* [Manual Installation](src/Manual_Installation/Instructions.md)
+* [Ubuntu 19.10 and higher](src/Ubuntu_Server/Instructions.md)
+* [CentOS 8](src/CentOS/Instructions.md)
+a
+### IMPORTANT NOTE:
 
-
-
-### IMPORTANT NOTE:  
 It is the responsibility of the system administrator to install and maintain the operating system and web server with the latest updates and security patches.
 
 ## Copyright © 2020 Butcherman

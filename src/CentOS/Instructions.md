@@ -1,10 +1,10 @@
-# Ubuntu Server 19.10 and Higher
+# CentOS 8
 
 ## Preparing the server
 
 Before the installation can begin, the following requirements must be met:
 
-* Ubuntu Operating System is up to date with the latest security updates
+* CentOS Operating System is up to date with the latest security updates
 * A Static IP Address must be assigned to the server
 * Ports 80 and 443 for HTTP and HTTPS should be opened and pointed to the server for Web Access
 
@@ -17,7 +17,7 @@ Before the installation can begin, the following requirements must be met:
 
 If you wish, you can copy and paste the command below to use curl to download the script directly from Github
 
-    curl -s https://raw.githubusercontent.com/butcherman/Tech_Bench_Installer/master/src/Ubuntu_Server/install.sh -o install.sh
+    curl -s https://raw.githubusercontent.com/butcherman/Tech_Bench_Installer/master/src/CentOS/install.sh -o install.sh
 
 Navigate to the folder containing the installation script.  To completely automate the process and have the script take care of all prerequisites, run the following commands:
 
@@ -45,7 +45,7 @@ If you opt for a manual installation, the following additional information will 
 * The Root Directory the web files are served from (Default is /var/www/html)
 * The name of the Database that will be used to store the Tech Bench data (note:  this database must already exist)
 * The username and password of the user that will be used by the Tech Bench to access the Tech Bench database
-* The password of the 'root' MySQL user
+* The password of the 'root' MySQL user   //  TODO:  Is this necessary???
 * If you would like to remove any existing virtual apache sites and create new sites specifically for the Tech Bench
 
 ***Note:*** If you select No, you must make sure that Apache Rewrite is enabled and working on your server.  If you select Yes, any existing virtual sites will be disabled.

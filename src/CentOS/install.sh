@@ -124,7 +124,7 @@ main()
 
 		#  Ask if virtual directories are already built
 		echo ''
-		read -p 'Build custom virtual sites for Tech Bench (Recommended)? [Y/N]: ' VIRDIR
+		read -p 'Update existing virtual sites for Tech Bench (Recommended)? [Y/N]: ' VIRDIR
 		if [[ $VIRDIR =~ [Nn]$ ]]; then
 			VIRDIR=false
 		else
@@ -132,13 +132,13 @@ main()
 		fi
 
 		#  Ask to disable any existing virtual directories
-		echo ''
-		read -p 'Disable any existing virtual directories? [Y/N]: ' DISVIR
-		if [[ $DISVIR =~ [Yy]$ ]]; then
-			DISVIR=true
-		else
-			DISVIR=false
-		fi
+		# echo ''
+		# read -p 'Disable any existing virtual directories? [Y/N]: ' DISVIR
+		# if [[ $DISVIR =~ [Yy]$ ]]; then
+		# 	DISVIR=true
+		# else
+		# 	DISVIR=false
+		# fi
 	fi
 
 	#  Set the full URL that will be used to access the website
@@ -175,8 +175,22 @@ main()
 
 	#  Create new virtual directory files for the Tech Bench site
 	if [ $VIRDIR == 'true' ]; then
+#		echo 'Generating Self Signed SSL Certificate.  Please answer the following questions: '
+	#	openssl req -newkey rsa:2048 -nodes -keyout /etc/pki/tls/private/httpd.key -x509 -days 365 -out /etc/pki/tls/certs/httpd.crt
+
 		writeConfFiles
 	fi
+
+	exit 0
+
+
+
+
+
+
+
+
+
 
 	#  Load dependencies and build application files
 	setupApplication
@@ -288,7 +302,7 @@ checkPrereqs()
 
 	#  Restart Apache if the prerequisites were installed
 	if [ $MANUAL == 'false' ]; then
-		systemctl reload apache2 >> $LOGFILE
+		systemctl restart httpd.service >> $LOGFILE 2>&1
 	fi
 }
 
@@ -296,24 +310,38 @@ checkPrereqs()
 checkApache()
 {
     printf 'Apache                                                      ' | tee -a $LOGFILE
-    if systemctl is-active --quiet apache2; then
+    if systemctl is-active --quiet httpd; then
         tput setaf 2
         echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
 		echo 'Apache is not Installed' >> $LOGFILE 2>&1
-		echo 'Installing LAMP Server' >> $LOGFILE 2>&1
+		echo 'Installing Apache Server' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING] '
 		startSpin
-		apt-get -q update >> $LOGFILE
-		apt-get -q install lamp-server^ -y >> $LOGFILE 2>&1
 
-		#  Get the location of the php.ini file and update the upload_max_filesize paramater
-#		PHPINI=$(php -i | grep php.ini | head -n 1 | cut -d " " -f 6)
-#		sed -i 's,^upload_max_filesize =.*$,post_max_size = 6M,' $PHPINI/php.ini
+		#  Install Apache and register the service
+		yum -q install httpd -y >> $LOGFILE 2>&1
+        systemctl start httpd.service >> $LOGFILE 2>&1
+        systemctl enable httpd.service >> $LOGFILE 2>&1
+
+		#  TODO - Set the servername globally
+
+		#  Enable SSL if required
+		if [ $SSLOnly == 'true' ]; then
+			SSLMOD=$(httpd -M | grep -c ssl) >> $LOGFILE 2>&1
+			if (( $SSLMOD < 1 )); then
+				yum -q install mod_ssl -y >> $LOGFILE 2>&1
+				systemctl restart httpd.service >> $LOGFILE 2>&1
+			fi
+		fi
+
+		#  Open http and https services on internal firewall
+		firewall-cmd --permanent --zone=public --add-service=http >> /dev/null 2>&1
+		firewall-cmd --permanent --zone=public --add-service=https >> /dev/null 2>&1
+		firewall-cmd --reload >> /dev/null 2>&1
 
 		echo -ne '\b\b\b\b\bED]      \n'
-		echo 'LAMP Server Installed' >> $LOGFILE 2>&1
-		WASINS=true
+		echo 'Apache Server Installed' >> $LOGFILE 2>&1
 		killSpin
     else
         tput setaf 1
@@ -328,12 +356,19 @@ checkMysql()
 {
     printf 'MySQL                                                       ' | tee -a $LOGFILE
     if systemctl is-active --quiet mysql; then
-        if [ $WASINS == 'false' ]; then
-			tput setaf 2
-			echo '[PASS]' | tee -a $LOGFILE
-		else
-			echo '[INSTALLED]' | tee -a $LOGFILE
-		fi
+        tput setaf 2
+        echo '[PASS]' | tee -a $LOGFILE
+    elif [ $MANUAL == 'false' ]; then
+        echo 'MySQL is not Installed' >> $LOGFILE 2>&1
+		echo 'Installing MySQL' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING] '
+		startSpin
+		yum -q install mariadb-server mariadb -y >> $LOGFILE 2>&1
+        systemctl start mariadb >> $LOGFILE 2>&1
+        systemctl enable mariadb.service >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\b\bED]      \n'
+		echo 'MySQL Installed' >> $LOGFILE 2>&1
+		killSpin
     else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -349,17 +384,29 @@ checkPHP()
     if hash php 2>/dev/null; then
         PHPVersion=$(php --version | head -n 1 | cut -d " " -f 2 | cut -c 1,3)
         if (($PHPVersion >= $minimumPHPVer)); then
-            if [ $WASINS == 'false' ]; then
-				tput setaf 2
-				echo '[PASS]' | tee -a $LOGFILE
-			else
-				echo '[INSTALLED]' | tee -a $LOGFILE
-			fi
+			tput setaf 2
+			echo '[PASS]' | tee -a $LOGFILE
         else
             tput setaf 1
             echo '[FAIL]' | tee -a $LOGFILE
             PREREQ=false
         fi
+	elif [ $MANUAL == 'false' ]; then
+        echo 'PHP is not Installed' >> $LOGFILE 2>&1
+		echo 'Installing PHP' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING] '
+		startSpin
+		yum -q install php -y >> $LOGFILE 2>&1
+
+		#  Get the location of the php.ini file and update the upload_max_filesize paramater
+		PHPINI=$(php -i | grep php.ini | head -n 1 | cut -d " " -f 6)
+		sed -i 's,^upload_max_filesize =.*$,upload_max_filesize = 6M,' $PHPINI/php.ini
+
+		#  Restart httpd to load new settings
+		systemctl restart httpd.service >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\b\bED]      \n'
+		echo 'PHP Installed' >> $LOGFILE 2>&1
+		killSpin
     else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -385,7 +432,7 @@ checkModules()
 	elif [ $MANUAL == 'false' ]; then
 		echo -en '[INSTALLING]'
 		startSpin
-		apt-get -q install php-dom -y >> $LOGFILE 2>&1
+		yum -q install php-dom -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo '[INSTALLED]' >> $LOGFILE 2>&1
 		killSpin
@@ -407,7 +454,7 @@ checkModules()
 		echo 'PHP-ZIP Module is not Installed.  Installing' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING]'
 		startSpin
-		apt-get -q install php-zip -y >> $LOGFILE 2>&1
+		yum -q install php-zip -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo 'PHP-ZIP Module Installed' >> $LOGFILE 2>&1
 		killSpin
@@ -429,7 +476,7 @@ checkModules()
 		echo 'PHP-GD Module is not Installed.  Installing' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING]'
 		startSpin
-		apt-get -q install php-gd -y >> $LOGFILE 2>&1
+		yum -q install php-gd -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo 'PHP-GD Module Installed' >> $LOGFILE 2>&1
 		killSpin
@@ -452,7 +499,9 @@ checkComposer()
 			echo 'Composer is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
 			startSpin
-			apt-get -q install composer -y >> $LOGFILE 2>&1
+			yum -q install php-json -y >> $LOGFILE 2>&1
+			curl -s https://getcomposer.org/installer -o composer-installer.php >> $LOGFILE 2>&1
+			sudo php composer-installer.php --install-dir=/usr/local/bin --filename=composer >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
 			echo 'Composer Installed' >> $LOGFILE 2>&1
 			killSpin
@@ -479,7 +528,7 @@ checkNodeJS()
 		echo 'NodeJS is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
 			startSpin
-			apt-get -q install nodejs -y >> $LOGFILE 2>&1
+			yum -q install nodejs -y >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
 			echo 'NodeJS Installed' >> $LOGFILE 2>&1
 			killSpin
@@ -551,7 +600,8 @@ checkSupervisor()
 			echo 'Supervisor is not Installed.  Installing' >> $LOGFILE 2>&1
 			echo -en '[INSTALLING]'
 			startSpin
-			apt-get install supervisor -y >> $LOGFILE 2>&1
+			yum -q install epel-release -y >> $LOGFILE 2>&1
+			yum -q install supervisor -y >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n\n'
 			echo 'Supervisor Installed' >> $LOGFILE 2>&1
 			killSpin
@@ -629,7 +679,7 @@ checkPackage()
 installPackage()
 {
 	#  Add the current user to the www-data group
-	usermod -a -G www-data $SUDO_USER
+#	usermod -a -G apache $SUDO_USER
 
 	#  Unzip installation files
 	echo 'Extracting Files'
@@ -671,80 +721,68 @@ installPackage()
 #  Write new apache config files
 writeConfFiles()
 {
-	echo 'Creating Apache Virtual Directories'
+	echo 'Updating Apache Virtual Directories'
 	startSpin
-
-	#  Disable any existing sites on the server
-	ENABLEDSITES=(`ls /etc/apache2/sites-enabled`)
-	ENABLEDLENGTH=${#ENABLEDSITES[*]}
-	if [ $ENABLEDLENGTH -ne 0 ]; then
-		i=0
-		while [ $i -lt $ENABLEDLENGTH ]; do
-			a2dissite ${ENABLEDSITES[$i]} >> $LOGFILE
-			let i++
-		done
-	fi
+	sed -i "s/DocumentRoot.*$/DocumentRoot \"\/var\/www\/\/html\/public\"/g" /etc/httpd/conf/httpd.conf
 
 	#  Create the new http site
-	touch /etc/apache2/sites-available/TechBench.conf
-	echo '<VirtualHost *:80>' > /etc/apache2/sites-available/TechBench.conf
-	echo '	ServerAdmin webmaster@localhost' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	DocumentRoot /var/www/html/public' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	<Directory "/var/www/html/public">' >> /etc/apache2/sites-available/TechBench.conf
-	echo '		Options Indexes FollowSymLinks MultiViews' >> /etc/apache2/sites-available/TechBench.conf
-	echo '		AllowOverride All' >> /etc/apache2/sites-available/TechBench.conf
-	echo '		Order allow,deny' >> /etc/apache2/sites-available/TechBench.conf
-	echo '		Allow from all' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	</Directory>' >> /etc/apache2/sites-available/TechBench.conf
-	echo '' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	ErrorLog ${APACHE_LOG_DIR}/error.log' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	CustomLog ${APACHE_LOG_DIR}/access.log combined' >> /etc/apache2/sites-available/TechBench.conf
-	if [ $SSLOnly == 'true' ]; then
-		echo ''	 >> /etc/apache2/sites-available/TechBench.conf
-		echo '	RewriteEngine on' >> /etc/apache2/sites-available/TechBench.conf
-		echo '	RewriteCond %{SERVER_NAME} ='$WebURL' [OR]' >> /etc/apache2/sites-available/TechBench.conf
-        echo '	RewriteCond %{SERVER_NAME} ='$FullURL >> /etc/apache2/sites-available/TechBench.conf
-        echo '	RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]' >> /etc/apache2/sites-available/TechBench.conf
-		echo '' >> /etc/apache2/sites-available/TechBench.conf
-	fi
-	echo '</VirtualHost>' >> /etc/apache2/sites-available/TechBench.conf
+	# HTTPSITE=/etc/httpd/conf.d/TechBench.conf
+	# touch $HTTPSITE
+	# echo '<VirtualHost _default_:80>' > $HTTPSITE
+	# echo '	ServerAdmin webmaster@localhost' >> $HTTPSITE
+	# echo '	DocumentRoot /var/www/html/public' >> $HTTPSITE
+	# echo '	<Directory "/var/www/html/public">' >> $HTTPSITE
+	# echo '		Options Indexes FollowSymLinks MultiViews' >> $HTTPSITE
+	# echo '		AllowOverride All' >> $HTTPSITE
+	# echo '		Order allow,deny' >> $HTTPSITE
+	# echo '		Allow from all' >> $HTTPSITE
+	# echo '	</Directory>' >> $HTTPSITE
+	# if [ $SSLOnly == 'true' ]; then
+	# 	echo ''	 >> $HTTPSITE
+	# 	echo '	RewriteEngine on' >> $HTTPSITE
+	# 	echo '	RewriteCond %{SERVER_NAME} ='$WebURL' [OR]' >> $HTTPSITE
+    #     echo '	RewriteCond %{SERVER_NAME} ='$FullURL >> $HTTPSITE
+    #     echo '	RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]' >> $HTTPSITE
+	# 	echo '' >> $HTTPSITE
+	# fi
+	# echo '</VirtualHost>' >> $HTTPSITE
 
-	#  Create the new https site
-	touch /etc/apache2/sites-available/SSLTechBench.conf
-	echo '<IfModule mod_ssl.c>' > /etc/apache2/sites-available/SSLTechBench.conf
-	echo '	<VirtualHost *:443>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		ServerAdmin webmaster@localhost' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		DocumentRoot /var/www/html/public' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		<Directory "/var/www/html/public">' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			Options Indexes FollowSymLinks MultiViews' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			AllowOverride All' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			Order allow,deny' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			Allow from all' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		</Directory>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		ErrorLog ${APACHE_LOG_DIR}/error.log' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		CustomLog ${APACHE_LOG_DIR}/access.log combined' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		SSLEngine on' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		SSLCertificateFile	/etc/ssl/certs/ssl-cert-snakeoil.pem' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		SSLCertificateKeyFile /etc/ssl/private/ssl-cert-snakeoil.key' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		<FilesMatch "\.(cgi|shtml|phtml|php)$">' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			SSLOptions +StdEnvVars' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		</FilesMatch>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		<Directory /usr/lib/cgi-bin>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			SSLOptions +StdEnvVars' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		</Directory>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '	</VirtualHost>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '</IfModule>' >> /etc/apache2/sites-available/SSLTechBench.conf
+	# #  Create the new https site
+	# if [ $SSLOnly == 'true' ]; then
+	# 	HTTPSSITE=/etc/httpd/conf.d/SSLTechBench.conf
+	# 	touch $HTTPSSITE
+	# 	echo '<IfModule mod_ssl.c>' > $HTTPSSITE
+	# 	echo '	<VirtualHost *:443>' >> $HTTPSSITE
+	# 	echo '		ServerAdmin webmaster@localhost' >> $HTTPSSITE
+	# 	echo '		DocumentRoot /var/www/html/public' >> $HTTPSSITE
+	# 	echo '		<Directory "/var/www/html/public">' >> $HTTPSSITE
+	# 	echo '			Options Indexes FollowSymLinks MultiViews' >> $HTTPSSITE
+	# 	echo '			AllowOverride All' >> $HTTPSSITE
+	# 	echo '			Order allow,deny' >> $HTTPSSITE
+	# 	echo '			Allow from all' >> $HTTPSSITE
+	# 	echo '		</Directory>' >> $HTTPSSITE
+	# 	echo '' >> $HTTPSSITE
+	# 	echo '		SSLEngine on' >> $HTTPSSITE
+	# 	echo '		SSLCertificateFile	/etc/pki/tls/certs/httpd.crt' >> $HTTPSSITE
+	# 	echo '		SSLCertificateKeyFile /etc/pki/tls/private/httpd.key' >> $HTTPSSITE
+	# 	echo '		<FilesMatch "\.(cgi|shtml|phtml|php)$">' >> $HTTPSSITE
+	# 	echo '			SSLOptions +StdEnvVars' >> $HTTPSSITE
+	# 	echo '		</FilesMatch>' >> $HTTPSSITE
+	# 	echo '		<Directory /usr/lib/cgi-bin>' >> $HTTPSSITE
+	# 	echo '			SSLOptions +StdEnvVars' >> $HTTPSSITE
+	# 	echo '		</Directory>' >> $HTTPSSITE
+	# 	echo '	</VirtualHost>' >> $HTTPSSITE
+	# 	echo '</IfModule>' >> $HTTPSSITE
+	# fi
 
-	#  Enable the necessary modules
-	a2enmod rewrite ssl >> $LOGFILE
+	# #  Enable the necessary modules
+	# a2enmod rewrite ssl >> $LOGFILE
 
-	#  Enable the new sites
-	a2ensite TechBench.conf SSLTechBench.conf >> $LOGFILE
+	# #  Enable the new sites
+	# a2ensite TechBench.conf SSLTechBench.conf >> $LOGFILE
 
-	#  Restart Apache
-	systemctl reload apache2 >> $LOGFILE
+	# #  Restart Apache
+	systemctl reload httpd.service >> $LOGFILE
 
 	killSpin
 }

@@ -24,6 +24,7 @@ WEBROOT=\/var\/www\/html
 USEFILE=null
 WORKERFILE=/etc/supervisor/conf.d/laravel-worker.conf
 CRONFILE=/etc/cron.d/laravel-jobs
+TBTMP=$SCRIPTROOT/tb_tmp
 
 #  Install Data Variables
 WebURL=localhost
@@ -32,7 +33,6 @@ SSLOnly=true
 DBName=techbench
 DBUser=tbUser
 DBPass=null
-ROOTPass=null
 VIRDIR=true
 DISVIR=true
 
@@ -41,6 +41,10 @@ if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"  | tee $LOGFILE
    exit 1
 fi
+
+#  Make temporary directory for holding tmp files
+mkdir $TBTMP
+cd $TBTMP
 
 #  Touch the log file and make sure it can be writen to by both the sudo user and normal user
 touch $LOGFILE && chmod 777 $LOGFILE
@@ -114,14 +118,6 @@ main()
 			fi
 		done
 
-		#  Get the root password for the database
-		if [ $DBUser != 'root' ]; then
-			echo 'For the database installation, we will need to get the password of the root user'
-			read -p 'Please enter the password for the MySQL root user: ' ROOTPass
-		else
-			ROOTPass=$DBPASS
-		fi
-
 		#  Ask if virtual directories are already built
 		echo ''
 		read -p 'Update existing virtual sites for Tech Bench (Recommended)? [Y/N]: ' VIRDIR
@@ -130,15 +126,6 @@ main()
 		else
 			VIRDIR=true
 		fi
-
-		#  Ask to disable any existing virtual directories
-		# echo ''
-		# read -p 'Disable any existing virtual directories? [Y/N]: ' DISVIR
-		# if [[ $DISVIR =~ [Yy]$ ]]; then
-		# 	DISVIR=true
-		# else
-		# 	DISVIR=false
-		# fi
 	fi
 
 	#  Set the full URL that will be used to access the website
@@ -175,22 +162,8 @@ main()
 
 	#  Create new virtual directory files for the Tech Bench site
 	if [ $VIRDIR == 'true' ]; then
-#		echo 'Generating Self Signed SSL Certificate.  Please answer the following questions: '
-	#	openssl req -newkey rsa:2048 -nodes -keyout /etc/pki/tls/private/httpd.key -x509 -days 365 -out /etc/pki/tls/certs/httpd.crt
-
 		writeConfFiles
 	fi
-
-	exit 0
-
-
-
-
-
-
-
-
-
 
 	#  Load dependencies and build application files
 	setupApplication
@@ -324,7 +297,7 @@ checkApache()
         systemctl start httpd.service >> $LOGFILE 2>&1
         systemctl enable httpd.service >> $LOGFILE 2>&1
 
-		#  TODO - Set the servername globally
+		sed -i "s/#ServerName.*$/ServerName $WebURL/g" /etc/httpd/conf/httpd.conf
 
 		#  Enable SSL if required
 		if [ $SSLOnly == 'true' ]; then
@@ -486,6 +459,72 @@ checkModules()
         PREREQ=false
     fi
     tput sgr0
+
+	#  PHP-PDO Module
+	printf 'PHP-PDO Module                                              ' | tee -a $LOGFILE
+	PDOMod=$(php -m | grep -c pdo)
+
+	if (( $PDOMod > 0 )); then
+		tput setaf 2
+            echo '[PASS]' | tee -a $LOGFILE
+	elif [ $MANUAL == 'false' ]; then
+		echo 'PHP-PDO Module is not Installed.  Installing' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING]'
+		startSpin
+		yum -q install php-pdo -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      \n'
+		echo 'PHP-PDO Module Installed' >> $LOGFILE 2>&1
+		killSpin
+    else
+        tput setaf 1
+        echo '[FAIL]' | tee -a $LOGFILE
+        PREREQ=false
+    fi
+    tput sgr0
+
+	#  PHP-MBSTRING Module
+	printf 'PHP-MBSTRING Module                                         ' | tee -a $LOGFILE
+	MBSMod=$(php -m | grep -c mbstring)
+
+	if (( $MBSMod > 0 )); then
+		tput setaf 2
+            echo '[PASS]' | tee -a $LOGFILE
+	elif [ $MANUAL == 'false' ]; then
+		echo 'PHP-MBSTRING Module is not Installed.  Installing' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING]'
+		startSpin
+		yum -q install php-mbstring -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      \n'
+		echo 'PHP-MBSTRING Module Installed' >> $LOGFILE 2>&1
+		killSpin
+    else
+        tput setaf 1
+        echo '[FAIL]' | tee -a $LOGFILE
+        PREREQ=false
+    fi
+    tput sgr0
+
+	#  PHP-MYSQLND Module
+	printf 'PHP-MYSQLND Module                                          ' | tee -a $LOGFILE
+	MBMYMod=$(php -m | grep -c mysqlnd)
+
+	if (( $MBMYMod > 0 )); then
+		tput setaf 2
+            echo '[PASS]' | tee -a $LOGFILE
+	elif [ $MANUAL == 'false' ]; then
+		echo 'PHP-MYSQLND Module is not Installed.  Installing' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING]'
+		startSpin
+		yum -q install php-mysqlnd -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      \n'
+		echo 'PHP-MYSQLND Module Installed' >> $LOGFILE 2>&1
+		killSpin
+    else
+        tput setaf 1
+        echo '[FAIL]' | tee -a $LOGFILE
+        PREREQ=false
+    fi
+    tput sgr0
 }
 
 # Check if Composer is installed
@@ -620,6 +659,7 @@ checkSupervisor()
 #  Check for the proper installation package
 checkPackage()
 {
+	cd $SCRIPTROOT
 	FILELIST=(`find . -maxdepth 1 -not -type d | grep Tech_Bench | tr -d .\/zip`)
 	LISTLEN=${#FILELIST[*]}
 	USEINDEX=null
@@ -678,8 +718,8 @@ checkPackage()
 #  Move the installation files to the WebRoot directory
 installPackage()
 {
-	#  Add the current user to the www-data group
-#	usermod -a -G apache $SUDO_USER
+	#  Add the current user to the apache group
+#	usermod -a -G apache 
 
 	#  Unzip installation files
 	echo 'Extracting Files'
@@ -712,8 +752,8 @@ installPackage()
 	#  Write the configuration settings to the .env file
 	sed -i "s/APP_URL=http:\/\/localhost/APP_URL=$FullURL/g" $WEBROOT/.env
 	sed -i "s/DB_DATABASE=tech-bench/DB_DATABASE=$DBName/g" $WEBROOT/.env
-	sed -i "s/DB_USERNAME=root/DB_USERNAME=root/g" $WEBROOT/.env        #  $DBUser/g" $WEBROOT/.env
-	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$ROOTPass/g" $WEBROOT/.env
+	sed -i "s/DB_USERNAME=root/DB_USERNAME=$DBUser/g" $WEBROOT/.env
+	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$DBPass/g" $WEBROOT/.env
 
 	killSpin
 }
@@ -723,65 +763,41 @@ writeConfFiles()
 {
 	echo 'Updating Apache Virtual Directories'
 	startSpin
-	sed -i "s/DocumentRoot.*$/DocumentRoot \"\/var\/www\/\/html\/public\"/g" /etc/httpd/conf/httpd.conf
 
-	#  Create the new http site
-	# HTTPSITE=/etc/httpd/conf.d/TechBench.conf
-	# touch $HTTPSITE
-	# echo '<VirtualHost _default_:80>' > $HTTPSITE
-	# echo '	ServerAdmin webmaster@localhost' >> $HTTPSITE
-	# echo '	DocumentRoot /var/www/html/public' >> $HTTPSITE
-	# echo '	<Directory "/var/www/html/public">' >> $HTTPSITE
-	# echo '		Options Indexes FollowSymLinks MultiViews' >> $HTTPSITE
-	# echo '		AllowOverride All' >> $HTTPSITE
-	# echo '		Order allow,deny' >> $HTTPSITE
-	# echo '		Allow from all' >> $HTTPSITE
-	# echo '	</Directory>' >> $HTTPSITE
-	# if [ $SSLOnly == 'true' ]; then
-	# 	echo ''	 >> $HTTPSITE
-	# 	echo '	RewriteEngine on' >> $HTTPSITE
-	# 	echo '	RewriteCond %{SERVER_NAME} ='$WebURL' [OR]' >> $HTTPSITE
-    #     echo '	RewriteCond %{SERVER_NAME} ='$FullURL >> $HTTPSITE
-    #     echo '	RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]' >> $HTTPSITE
-	# 	echo '' >> $HTTPSITE
-	# fi
-	# echo '</VirtualHost>' >> $HTTPSITE
+	#  Update the Web Root directory and allow .haccess override
+	sed -i "s~DocumentRoot.*$~DocumentRoot \"$WEBROOT\/public\"~g" /etc/httpd/conf/httpd.conf
+	sed -i "s/AllowOverride None /AllowOverride All/g" /etc/httpd/conf/httpd.conf
 
-	# #  Create the new https site
-	# if [ $SSLOnly == 'true' ]; then
-	# 	HTTPSSITE=/etc/httpd/conf.d/SSLTechBench.conf
-	# 	touch $HTTPSSITE
-	# 	echo '<IfModule mod_ssl.c>' > $HTTPSSITE
-	# 	echo '	<VirtualHost *:443>' >> $HTTPSSITE
-	# 	echo '		ServerAdmin webmaster@localhost' >> $HTTPSSITE
-	# 	echo '		DocumentRoot /var/www/html/public' >> $HTTPSSITE
-	# 	echo '		<Directory "/var/www/html/public">' >> $HTTPSSITE
-	# 	echo '			Options Indexes FollowSymLinks MultiViews' >> $HTTPSSITE
-	# 	echo '			AllowOverride All' >> $HTTPSSITE
-	# 	echo '			Order allow,deny' >> $HTTPSSITE
-	# 	echo '			Allow from all' >> $HTTPSSITE
-	# 	echo '		</Directory>' >> $HTTPSSITE
-	# 	echo '' >> $HTTPSSITE
-	# 	echo '		SSLEngine on' >> $HTTPSSITE
-	# 	echo '		SSLCertificateFile	/etc/pki/tls/certs/httpd.crt' >> $HTTPSSITE
-	# 	echo '		SSLCertificateKeyFile /etc/pki/tls/private/httpd.key' >> $HTTPSSITE
-	# 	echo '		<FilesMatch "\.(cgi|shtml|phtml|php)$">' >> $HTTPSSITE
-	# 	echo '			SSLOptions +StdEnvVars' >> $HTTPSSITE
-	# 	echo '		</FilesMatch>' >> $HTTPSSITE
-	# 	echo '		<Directory /usr/lib/cgi-bin>' >> $HTTPSSITE
-	# 	echo '			SSLOptions +StdEnvVars' >> $HTTPSSITE
-	# 	echo '		</Directory>' >> $HTTPSSITE
-	# 	echo '	</VirtualHost>' >> $HTTPSSITE
-	# 	echo '</IfModule>' >> $HTTPSSITE
-	# fi
+#  TODO:  Generate Self Signed Cert does not work???
+	#  Generate self signed SSL Certificate
+	# openssl rand -base64 48 > $TBTMP/passphrase.txt
+	# openssl genrsa -aes128 -passout file:$TBTMP/passphrase.txt -out $TBTMP/server.key 2048 >> $LOGFILE 2>&1
+	# openssl req -new -passin file:$TBTMP/passphrase.txt -key $TBTMP/server.key -out $TBTMP/server.csr \
+	# 	-subj "/C=FR/O=tb/OU=Domain Control Validated/CN=*.tb.io" >> $LOGFILE 2>&1
+	# cp $TBTMP/server.key $TBTMP/server.key.org >> $LOGFILE 2>&1
+	# openssl rsa -in $TBTMP/server.key.org -passin file:$TBTMP/passphrase.txt -out $TBTMP/server.key >> $LOGFILE 2>&1
+	# openssl x509 -req -days 36500 -in $TBTMP/server.csr -signkey $TBTMP/server.key -out $TBTMP/server.crt >> $LOGFILE 2>&1
 
-	# #  Enable the necessary modules
-	# a2enmod rewrite ssl >> $LOGFILE
+	# #  Move the new certificate and key to the Tech Bench directory
+	# mkdir $WEBROOT/keystore >> $LOGFILE 2>&1
+	# mkdir $WEBROOT/keystore/cert >> $LOGFILE 2>&1
+	# mv $TBTMP/server.crt $WEBROOT/keystore/cert/selfSigned.crt >> $LOGFILE 2>&1
+	# mv $TBTMP/server.key $WEBROOT/keystore/cert/selfSigned.key >> $LOGFILE 2>&1
 
-	# #  Enable the new sites
-	# a2ensite TechBench.conf SSLTechBench.conf >> $LOGFILE
+	#  update Web Config to reference new self signed cert
+#	sed -i "s~SSLCertificateFile.*$~SSLCertificateFile $WEBROOT\/keystore\/cert\/selfSigned.crt~g" /etc/httpd/conf.d/ssl.conf
+#	sed -i "s~SSLCertificateKeyFile.*$~SSLCertificateKeyFile $WEBROOT\/keystore\/cert\/selfSigned.key~g" /etc/httpd/conf.d/ssl.conf
 
-	# #  Restart Apache
+	if [ $SSLOnly == true ]; then
+		REDIRECT=/etc/httpd/conf.d/redirect_http.conf
+		touch $REDIRECT
+		echo "<VirtualHost _default_:80>" > $REDIRECT
+        echo "	Servername $WebURL" >> $REDIRECT
+        echo "	Redirect permanent / $FullURL" >> $REDIRECT
+		echo "</VirtualHost>" >> $REDIRECT
+	fi
+
+	#  Restart Apache
 	systemctl reload httpd.service >> $LOGFILE
 
 	killSpin
@@ -790,17 +806,15 @@ writeConfFiles()
 #  Download all dependencies from composer and NPM and setup application
 setupApplication()
 {
-	printf 'Creating Tech Bench Application '
+	printf 'Creating Tech Bench Application (this may take some time) '
 	startSpin
 	#  If the installer is not being done manually, create the database and database user
 	if [ $MANUAL == 'false' ]; then
 		mysql <<SCRIPT
-			ALTER USER 'root'@'localhost' IDENTIFIED BY '$DBPASS';
-			ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DBPASS';
 			CREATE DATABASE IF NOT EXISTS \`$DBName\`;
-			CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED WITH mysql_native_password BY '$DBPass';
+			CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED BY '$DBPass';
 			GRANT ALL PRIVILEGES ON \`$DBName\`.* TO '$DBUser'@'localhost' WITH GRANT OPTION;
-#			GRANT SELECT ON \`information_schema\`.* TO '$DBUser'@'localhost';
+			GRANT SELECT ON *.* TO '$DBUser'@'localhost';
 			FLUSH PRIVILEGES;
 SCRIPT
 	fi
@@ -825,32 +839,33 @@ SCRIPT
 	su -c "php artisan route:cache" $SUDO_USER &>> $LOGFILE
 
 	# Setup Supervisor service to work email queue
-	touch $WORKERFILE
-	echo "#  The laravel-worker program will ensure the queue:work command " >> $WORKERFILE
-	echo "#  is constantly running." >> $WORKERFILE
-	echo "" >> $WORKERFILE
-	echo "[program:laravel-worker]" >> $WORKERFILE
-	echo "process_name=%(program_name)s_%(process_num)02d" >> $WORKERFILE
-	echo "command=php $WEBROOT/artisan queue:work --sleep=3 --tries=3" >> $WORKERFILE
-	echo "autostart=true" >> $WORKERFILE
-	echo "autorestart=true" >> $WORKERFILE
-	echo "user=www-data" >> $WORKERFILE
-	echo "numprocs=8" >> $WORKERFILE
-	echo "redirect_stderr=true" >> $WORKERFILE
-	echo "stdout_logfile=$WEBROOT/storage/logs/worker.log" >> $WORKERFILE
+	# touch $WORKERFILE
+	# echo "#  The laravel-worker program will ensure the queue:work command " >> $WORKERFILE
+	# echo "#  is constantly running." >> $WORKERFILE
+	# echo "" >> $WORKERFILE
+	# echo "[program:laravel-worker]" >> $WORKERFILE
+	# echo "process_name=%(program_name)s_%(process_num)02d" >> $WORKERFILE
+	# echo "command=php $WEBROOT/artisan queue:work --sleep=3 --tries=3" >> $WORKERFILE
+	# echo "autostart=true" >> $WORKERFILE
+	# echo "autorestart=true" >> $WORKERFILE
+	# echo "user=www-data" >> $WORKERFILE
+	# echo "numprocs=8" >> $WORKERFILE
+	# echo "redirect_stderr=true" >> $WORKERFILE
+	# echo "stdout_logfile=$WEBROOT/storage/logs/worker.log" >> $WORKERFILE
 
-	# Start the Supervisor service
-	supervisorctl reread >> $LOGFILE
-	supervisorctl update >> $LOGFILE
-	supervisorctl start laravel-worker:* >> $LOGFILE
+	# # Start the Supervisor service
+	# supervisorctl reread >> $LOGFILE
+	# supervisorctl update >> $LOGFILE
+	# supervisorctl start laravel-worker:* >> $LOGFILE
 
-	# Setup the cron file for all Scheduled Tasks performed by the Tech Bench
-	touch $CRONFILE
-	echo "#  The laravel-jobs cron job is to run any scheduled tasks performed by the Tech Bench" >> $CRONFILE
-	echo "" >> $CRONFILE
-	echo "* * * * * cd $WEBROOT && php artisan schedule:run >> /dev/null 2>&1" >> $CRONFILE
+	# # Setup the cron file for all Scheduled Tasks performed by the Tech Bench
+	# touch $CRONFILE
+	# echo "#  The laravel-jobs cron job is to run any scheduled tasks performed by the Tech Bench" >> $CRONFILE
+	# echo "" >> $CRONFILE
+	# echo "* * * * * cd $WEBROOT && php artisan schedule:run >> /dev/null 2>&1" >> $CRONFILE
 
 	killSpin
+	exit 0
 }
 
 cleanup()
@@ -858,12 +873,8 @@ cleanup()
 	printf '\nCleaning Up '
 	startSpin
 
-	#  Update the .env file to use the proper user for the database access
-	sed -i "s/DB_USERNAME=root/DB_USERNAME=$DBUser/g" $WEBROOT/.env
-	sed -i "s/DB_PASSWORD=$ROOTPass/DB_PASSWORD=$DBPASS/g" $WEBROOT/.env
-
 	#  Set file permissions and owner
-	chown -R www-data:www-data $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
+	chown -R apache:apache $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
 	find $WEBROOT -type f -exec chmod 644 {} \; >> $LOGFILE
 	find $WEBROOT -type d -exec chmod 755 {} \; >> $LOGFILE
 
@@ -873,7 +884,7 @@ cleanup()
 
 	#  Delete the files created by the installer
 	find $SCRIPTROOT/$USEFILE --delete >> $LOGFILE
-	find $SCRIPTROOT/npm --delete >> $LOGFILE
+	find $TBTMP --delete >> $LOGFILE
 
 	#  Move the installer log into the storage/logs directory
 	mv $LOGFILE $WEBROOT/storage/logs/Tech_Bench_Install.log
@@ -884,7 +895,8 @@ cleanup()
 #  Spinner to show while background processes are running
 spin()
 {
-	spinner="/|\\-/|\\-"
+#	spinner="/|\\-/|\\-"
+	spinner="-\\|/-\\|/"
 	while :
 	do
 		for i in `seq 0 7`

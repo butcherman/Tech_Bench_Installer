@@ -160,10 +160,12 @@ main()
 	checkPackage
 	installPackage
 
-	#  Create new virtual directory files for the Tech Bench site
+	# #  Create new virtual directory files for the Tech Bench site
 	if [ $VIRDIR == 'true' ]; then
 		writeConfFiles
 	fi
+
+	exit 0
 
 	#  Load dependencies and build application files
 	setupApplication
@@ -257,7 +259,7 @@ check()
 checkPrereqs()
 {
 	#  Check for web server
-	checkApache
+	checkNginx
 	checkMysql
 	checkPHP
 
@@ -273,48 +275,37 @@ checkPrereqs()
 	checkUnzip
 	checkSupervisor
 
-	#  Restart Apache if the prerequisites were installed
+	#  Restart NGINX if the prerequisites were installed
 	if [ $MANUAL == 'false' ]; then
-		systemctl restart httpd.service >> $LOGFILE 2>&1
+		systemctl restart nginx >> $LOGFILE 2>&1
 	fi
 }
 
-#  Check Apache is installed and running
-checkApache()
+checkNginx()
 {
-    printf 'Apache                                                      ' | tee -a $LOGFILE
-    if systemctl is-active --quiet httpd; then
+	printf 'Nginx                                                       ' | tee -a $LOGFILE
+    if systemctl is-active --quiet nginx; then
         tput setaf 2
         echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
-		echo 'Apache is not Installed' >> $LOGFILE 2>&1
-		echo 'Installing Apache Server' >> $LOGFILE 2>&1
+		echo 'Nginx is not Installed' >> $LOGFILE 2>&1
+		echo 'Installing Nginx Server' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING] '
 		startSpin
 
-		#  Install Apache and register the service
-		yum -q install httpd -y >> $LOGFILE 2>&1
-        systemctl start httpd.service >> $LOGFILE 2>&1
-        systemctl enable httpd.service >> $LOGFILE 2>&1
-
-		sed -i "s/#ServerName.*$/ServerName $WebURL/g" /etc/httpd/conf/httpd.conf
-
-		#  Enable SSL if required
-		if [ $SSLOnly == 'true' ]; then
-			SSLMOD=$(httpd -M | grep -c ssl) >> $LOGFILE 2>&1
-			if (( $SSLMOD < 1 )); then
-				yum -q install mod_ssl -y >> $LOGFILE 2>&1
-				systemctl restart httpd.service >> $LOGFILE 2>&1
-			fi
-		fi
+		#  Install NGINX and register the service
+		yum -q install nginx -y >> $LOGFILE 2>&1
+        systemctl enable nginx >> $LOGFILE 2>&1
+        systemctl start nginx >> $LOGFILE 2>&1
 
 		#  Open http and https services on internal firewall
 		firewall-cmd --permanent --zone=public --add-service=http >> /dev/null 2>&1
 		firewall-cmd --permanent --zone=public --add-service=https >> /dev/null 2>&1
 		firewall-cmd --reload >> /dev/null 2>&1
+		setenforce permissive >> /dev/null 2>&1
 
 		echo -ne '\b\b\b\b\bED]      \n'
-		echo 'Apache Server Installed' >> $LOGFILE 2>&1
+		echo 'Nginx Installed' >> $LOGFILE 2>&1
 		killSpin
     else
         tput setaf 1
@@ -375,8 +366,8 @@ checkPHP()
 		PHPINI=$(php -i | grep php.ini | head -n 1 | cut -d " " -f 6)
 		sed -i 's,^upload_max_filesize =.*$,upload_max_filesize = 6M,' $PHPINI/php.ini
 
-		#  Restart httpd to load new settings
-		systemctl restart httpd.service >> $LOGFILE 2>&1
+		#  Restart nginx to load new settings
+		systemctl restart nginx >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'PHP Installed' >> $LOGFILE 2>&1
 		killSpin
@@ -525,6 +516,9 @@ checkModules()
         PREREQ=false
     fi
     tput sgr0
+
+	#  Restart NGINX to apply all modules
+	systemctl restart nginx
 }
 
 # Check if Composer is installed
@@ -540,7 +534,7 @@ checkComposer()
 			startSpin
 			yum -q install php-json -y >> $LOGFILE 2>&1
 			curl -s https://getcomposer.org/installer -o composer-installer.php >> $LOGFILE 2>&1
-			sudo php composer-installer.php --install-dir=/usr/local/bin --filename=composer >> $LOGFILE 2>&1
+			php composer-installer.php --install-dir=/usr/local/bin --filename=composer >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
 			echo 'Composer Installed' >> $LOGFILE 2>&1
 			killSpin
@@ -718,8 +712,7 @@ checkPackage()
 #  Move the installation files to the WebRoot directory
 installPackage()
 {
-	#  Add the current user to the apache group
-#	usermod -a -G apache 
+	mkdir -p $WEBROOT
 
 	#  Unzip installation files
 	echo 'Extracting Files'
@@ -761,45 +754,51 @@ installPackage()
 #  Write new apache config files
 writeConfFiles()
 {
-	echo 'Updating Apache Virtual Directories'
+	echo 'Updating NGINX Config'
 	startSpin
 
-	#  Update the Web Root directory and allow .haccess override
-	sed -i "s~DocumentRoot.*$~DocumentRoot \"$WEBROOT\/public\"~g" /etc/httpd/conf/httpd.conf
-	sed -i "s/AllowOverride None /AllowOverride All/g" /etc/httpd/conf/httpd.conf
+	#  Update the config file to reference the proper web root
+	sed -i "s~root.*$~root "$WEBROOT\/public";~1" /etc/nginx/nginx.conf
 
-#  TODO:  Generate Self Signed Cert does not work???
-	#  Generate self signed SSL Certificate
-	# openssl rand -base64 48 > $TBTMP/passphrase.txt
-	# openssl genrsa -aes128 -passout file:$TBTMP/passphrase.txt -out $TBTMP/server.key 2048 >> $LOGFILE 2>&1
-	# openssl req -new -passin file:$TBTMP/passphrase.txt -key $TBTMP/server.key -out $TBTMP/server.csr \
-	# 	-subj "/C=FR/O=tb/OU=Domain Control Validated/CN=*.tb.io" >> $LOGFILE 2>&1
-	# cp $TBTMP/server.key $TBTMP/server.key.org >> $LOGFILE 2>&1
-	# openssl rsa -in $TBTMP/server.key.org -passin file:$TBTMP/passphrase.txt -out $TBTMP/server.key >> $LOGFILE 2>&1
-	# openssl x509 -req -days 36500 -in $TBTMP/server.csr -signkey $TBTMP/server.key -out $TBTMP/server.crt >> $LOGFILE 2>&1
+	#  Enable SSL if required
+	if [ $SSLOnly == 'true' ]; then
+			sed '/^# Settings for a TLS enabled server.$/r'<(
+				echo '    server {'
+				echo '        listen       443 ssl http2 default_server;'
+				echo '        listen       [::]:443 ssl http2 default_server;'
+				echo '        root         '$WEBROOT'/public;'
+				echo '        index        index.php;'
+				echo ''
+				echo '        ssl_certificate "'$WEBROOT'/keystore/cert/server.crt";'
+				echo '        ssl_certificate_key "'$WEBROOT'/keystore/cert/private/server.key";'
+				echo '        ssl_session_cache shared:SSL:1m;'
+				echo '        ssl_session_timeout  10m;'
+				echo '        ssl_ciphers PROFILE=SYSTEM;'
+				echo '        ssl_prefer_server_ciphers on;'
+				echo ''
+				echo '        include /etc/nginx/default.d/*.conf;'
+				echo '        location / {'
+				echo '        }'
+				echo '    }'
+			) -i -- /etc/nginx/nginx.conf
 
-	# #  Move the new certificate and key to the Tech Bench directory
-	# mkdir $WEBROOT/keystore >> $LOGFILE 2>&1
-	# mkdir $WEBROOT/keystore/cert >> $LOGFILE 2>&1
-	# mv $TBTMP/server.crt $WEBROOT/keystore/cert/selfSigned.crt >> $LOGFILE 2>&1
-	# mv $TBTMP/server.key $WEBROOT/keystore/cert/selfSigned.key >> $LOGFILE 2>&1
+			#  Generate self signed SSL Certificate
+			openssl rand -base64 48 > $TBTMP/passphrase.txt
+			openssl genrsa -aes128 -passout file:$TBTMP/passphrase.txt -out $TBTMP/server.key 2048 >> $LOGFILE 2>&1
+			openssl req -new -passin file:$TBTMP/passphrase.txt -key $TBTMP/server.key -out $TBTMP/server.csr \
+				-subj "/C=FR/O=tb/OU=Domain Control Validated/CN=*.tb.io" >> $LOGFILE 2>&1
+			cp $TBTMP/server.key $TBTMP/server.key.org >> $LOGFILE 2>&1
+			openssl rsa -in $TBTMP/server.key.org -passin file:$TBTMP/passphrase.txt -out $TBTMP/server.key >> $LOGFILE 2>&1
+			openssl x509 -req -days 36500 -in $TBTMP/server.csr -signkey $TBTMP/server.key -out $TBTMP/server.crt >> $LOGFILE 2>&1
 
-	#  update Web Config to reference new self signed cert
-#	sed -i "s~SSLCertificateFile.*$~SSLCertificateFile $WEBROOT\/keystore\/cert\/selfSigned.crt~g" /etc/httpd/conf.d/ssl.conf
-#	sed -i "s~SSLCertificateKeyFile.*$~SSLCertificateKeyFile $WEBROOT\/keystore\/cert\/selfSigned.key~g" /etc/httpd/conf.d/ssl.conf
+			#  Move the new certificate and key to the Tech Bench directory
+			mkdir -p $WEBROOT/keystore/cert/private >> $LOGFILE 2>&1
+			mv $TBTMP/server.crt $WEBROOT/keystore/cert/server.crt >> $LOGFILE 2>&1
+			mv $TBTMP/server.key $WEBROOT/keystore/cert/private/server.key >> $LOGFILE 2>&1
+		fi
 
-	if [ $SSLOnly == true ]; then
-		REDIRECT=/etc/httpd/conf.d/redirect_http.conf
-		touch $REDIRECT
-		echo "<VirtualHost _default_:80>" > $REDIRECT
-        echo "	Servername $WebURL" >> $REDIRECT
-        echo "	Redirect permanent / $FullURL" >> $REDIRECT
-		echo "</VirtualHost>" >> $REDIRECT
-	fi
-
-	#  Restart Apache
-	systemctl reload httpd.service >> $LOGFILE
-
+	#  Restart NGINX
+	systemctl restart nginx >> $LOGFILE
 	killSpin
 }
 

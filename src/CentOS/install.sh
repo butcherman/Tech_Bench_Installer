@@ -22,7 +22,7 @@ SCRIPTROOT=$(pwd)
 LOGFILE=$SCRIPTROOT/TB_Install.log
 WEBROOT=\/var\/www\/html
 USEFILE=null
-WORKERFILE=/etc/supervisor/conf.d/laravel-worker.conf
+WORKERFILE=/etc/supervisor.d/laravel-worker.conf
 CRONFILE=/etc/cron.d/laravel-jobs
 TBTMP=$SCRIPTROOT/tb_tmp
 
@@ -165,11 +165,9 @@ main()
 		writeConfFiles
 	fi
 
-	exit 0
-
 	#  Load dependencies and build application files
 	setupApplication
-	cleanup
+	# cleanup
 
 	#  Installation finished
 	FullURL=$($FullURL -tr -d \ )
@@ -754,50 +752,149 @@ installPackage()
 #  Write new apache config files
 writeConfFiles()
 {
+	NGINXCONFIG=/etc/nginx/nginx.conf
+
 	echo 'Updating NGINX Config'
 	startSpin
 
-	#  Update the config file to reference the proper web root
-	sed -i "s~root.*$~root "$WEBROOT\/public";~1" /etc/nginx/nginx.conf
+	#  Move existing config to config.old
+	mv $NGINXCONFIG $NGINXCONFIG.old
 
-	#  Enable SSL if required
+	#  Write a new config
+	touch /etc/nginx/nginx.conf
+	echo ' user nginx;' >> $NGINXCONFIG
+	echo ' worker_processes auto;' >> $NGINXCONFIG
+	echo ' error_log /var/log/nginx/error.log;' >> $NGINXCONFIG
+	echo ' pid /run/nginx.pid;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' include /usr/share/nginx/modules/*.conf;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' events {' >> $NGINXCONFIG
+	echo ' 	worker_connections 1024;' >> $NGINXCONFIG
+	echo ' }' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' http {' >> $NGINXCONFIG
+	echo ' 	log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '' >> $NGINXCONFIG
+	echo ' 					'$status $body_bytes_sent "$http_referer" '' >> $NGINXCONFIG
+	echo ' 					'"$http_user_agent" "$http_x_forwarded_for"';' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	access_log  /var/log/nginx/access.log  main;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	sendfile            on;' >> $NGINXCONFIG
+	echo ' 	tcp_nopush          on;' >> $NGINXCONFIG
+	echo ' 	tcp_nodelay         on;' >> $NGINXCONFIG
+	echo ' 	keepalive_timeout   65;' >> $NGINXCONFIG
+	echo ' 	types_hash_max_size 2048;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	include             /etc/nginx/mime.types;' >> $NGINXCONFIG
+	echo ' 	default_type        application/octet-stream;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	include /etc/nginx/conf.d/*.conf;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	server {' >> $NGINXCONFIG
+	echo ' 		listen       80 default_server;' >> $NGINXCONFIG
+	echo ' 		listen       [::]:80 default_server;' >> $NGINXCONFIG
+	echo ' 		server_name  _;' >> $NGINXCONFIG
 	if [ $SSLOnly == 'true' ]; then
-			sed '/^# Settings for a TLS enabled server.$/r'<(
-				echo '    server {'
-				echo '        listen       443 ssl http2 default_server;'
-				echo '        listen       [::]:443 ssl http2 default_server;'
-				echo '        root         '$WEBROOT'/public;'
-				echo '        index        index.php;'
-				echo ''
-				echo '        ssl_certificate "'$WEBROOT'/keystore/cert/server.crt";'
-				echo '        ssl_certificate_key "'$WEBROOT'/keystore/cert/private/server.key";'
-				echo '        ssl_session_cache shared:SSL:1m;'
-				echo '        ssl_session_timeout  10m;'
-				echo '        ssl_ciphers PROFILE=SYSTEM;'
-				echo '        ssl_prefer_server_ciphers on;'
-				echo ''
-				echo '        include /etc/nginx/default.d/*.conf;'
-				echo '        location / {'
-				echo '        }'
-				echo '    }'
-			) -i -- /etc/nginx/nginx.conf
+		echo '' >> $NGINXCONFIG
+		echo '		return 302 https://'$WebURL'$request_uri;' >> $NGINXCONFIG
+		echo '' >> $NGINXCONFIG
+	fi
+	echo " 		root $WEBROOT/public;" >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		add_header X-Frame-Options "SAMEORIGIN";' >> $NGINXCONFIG
+	echo ' 		add_header X-XSS-Protection "1; mode=block";' >> $NGINXCONFIG
+	echo ' 		add_header X-Content-Type-Options "nosniff";' >> $NGINXCONFIG
+	echo ' 	' >> $NGINXCONFIG
+	echo ' 		index index.php' >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		charset utf-8;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		include /etc/nginx/default.d/*.conf;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location / {' >> $NGINXCONFIG
+	echo ' 			try_files $uri $uri/ /index.php?$query_string;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		location = /favicon.ico { access_log off; log_not_found off; }' >> $NGINXCONFIG
+	echo ' 		location = /robots.txt  { access_log off; log_not_found off; }' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		error_page 404 /index.php;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location ~ \.php$ {' >> $NGINXCONFIG
+	echo ' 			fastcgi_pass unix:/var/run/php/php7.2-fpm.sock;' >> $NGINXCONFIG
+	echo ' 			fastcgi_index index.php;' >> $NGINXCONFIG
+	echo ' 			fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;' >> $NGINXCONFIG
+	echo ' 			include fastcgi_params;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location ~ /\.(?!well-known).* {' >> $NGINXCONFIG
+	echo ' 			deny all;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' 	}' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	# Settings for a TLS enabled server.' >> $NGINXCONFIG
+	echo ' 	server {' >> $NGINXCONFIG
+	echo ' 		listen       443 ssl http2 default_server;' >> $NGINXCONFIG
+	echo ' 		listen       [::]:443 ssl http2 default_server;' >> $NGINXCONFIG
+	echo ' 		server_name  _;' >> $NGINXCONFIG
+	echo " 		root         $WEBROOT/public;" >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		add_header X-Frame-Options "SAMEORIGIN";' >> $NGINXCONFIG
+	echo ' 		add_header X-XSS-Protection "1; mode=block";' >> $NGINXCONFIG
+	echo ' 		add_header X-Content-Type-Options "nosniff";' >> $NGINXCONFIG
+	echo ' 	' >> $NGINXCONFIG
+	echo ' 		index index.php;' >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		charset utf-8;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		ssl_certificate "'$WEBROOT'/keystore/cert/server.crt";' >> $NGINXCONFIG
+	echo ' 		ssl_certificate_key "'$WEBROOT'/keystore/cert/private/server.key";' >> $NGINXCONFIG
+	echo ' 		ssl_session_cache shared:SSL:1m;' >> $NGINXCONFIG
+	echo ' 		ssl_session_timeout  10m;' >> $NGINXCONFIG
+	echo ' 		ssl_ciphers PROFILE=SYSTEM;' >> $NGINXCONFIG
+	echo ' 		ssl_prefer_server_ciphers on;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		include /etc/nginx/default.d/*.conf;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location / {' >> $NGINXCONFIG
+	echo ' 			try_files $uri $uri/ /index.php?$query_string;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		location = /favicon.ico { access_log off; log_not_found off; }' >> $NGINXCONFIG
+	echo ' 		location = /robots.txt  { access_log off; log_not_found off; }' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		error_page 404 /index.php;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location ~ \.php$ {' >> $NGINXCONFIG
+	echo ' 			fastcgi_pass unix:/var/run/php/php7.2-fpm.sock;' >> $NGINXCONFIG
+	echo ' 			fastcgi_index index.php;' >> $NGINXCONFIG
+	echo ' 			fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;' >> $NGINXCONFIG
+	echo ' 			include fastcgi_params;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location ~ /\.(?!well-known).* {' >> $NGINXCONFIG
+	echo ' 			deny all;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' 	}' >> $NGINXCONFIG
+	echo ' }' >> $NGINXCONFIG
 
-			#  Generate self signed SSL Certificate
-			openssl rand -base64 48 > $TBTMP/passphrase.txt
-			openssl genrsa -aes128 -passout file:$TBTMP/passphrase.txt -out $TBTMP/server.key 2048 >> $LOGFILE 2>&1
-			openssl req -new -passin file:$TBTMP/passphrase.txt -key $TBTMP/server.key -out $TBTMP/server.csr \
-				-subj "/C=FR/O=tb/OU=Domain Control Validated/CN=*.tb.io" >> $LOGFILE 2>&1
-			cp $TBTMP/server.key $TBTMP/server.key.org >> $LOGFILE 2>&1
-			openssl rsa -in $TBTMP/server.key.org -passin file:$TBTMP/passphrase.txt -out $TBTMP/server.key >> $LOGFILE 2>&1
-			openssl x509 -req -days 36500 -in $TBTMP/server.csr -signkey $TBTMP/server.key -out $TBTMP/server.crt >> $LOGFILE 2>&1
+	#  Generate self signed SSL Certificate
+	openssl rand -base64 48 > $TBTMP/passphrase.txt
+	openssl genrsa -aes128 -passout file:$TBTMP/passphrase.txt -out $TBTMP/server.key 2048 >> $LOGFILE 2>&1
+	openssl req -new -passin file:$TBTMP/passphrase.txt -key $TBTMP/server.key -out $TBTMP/server.csr \
+		-subj "/C=FR/O=tb/OU=Domain Control Validated/CN=*.tb.io" >> $LOGFILE 2>&1
+	cp $TBTMP/server.key $TBTMP/server.key.org >> $LOGFILE 2>&1
+	openssl rsa -in $TBTMP/server.key.org -passin file:$TBTMP/passphrase.txt -out $TBTMP/server.key >> $LOGFILE 2>&1
+	openssl x509 -req -days 36500 -in $TBTMP/server.csr -signkey $TBTMP/server.key -out $TBTMP/server.crt >> $LOGFILE 2>&1
 
-			#  Move the new certificate and key to the Tech Bench directory
-			mkdir -p $WEBROOT/keystore/cert/private >> $LOGFILE 2>&1
-			mv $TBTMP/server.crt $WEBROOT/keystore/cert/server.crt >> $LOGFILE 2>&1
-			mv $TBTMP/server.key $WEBROOT/keystore/cert/private/server.key >> $LOGFILE 2>&1
-		fi
+	#  Move the new certificate and key to the Tech Bench directory
+	mkdir -p $WEBROOT/keystore/cert/private >> $LOGFILE 2>&1
+	mv $TBTMP/server.crt $WEBROOT/keystore/cert/server.crt >> $LOGFILE 2>&1
+	mv $TBTMP/server.key $WEBROOT/keystore/cert/private/server.key >> $LOGFILE 2>&1
 
 	#  Restart NGINX
+	setenforce permissive >> /dev/null 2>&1
 	systemctl restart nginx >> $LOGFILE
 	killSpin
 }
@@ -806,7 +903,7 @@ writeConfFiles()
 setupApplication()
 {
 	printf 'Creating Tech Bench Application (this may take some time) '
-	startSpin
+	# startSpin
 	#  If the installer is not being done manually, create the database and database user
 	if [ $MANUAL == 'false' ]; then
 		mysql <<SCRIPT
@@ -820,51 +917,56 @@ SCRIPT
 
 	#  Install composer dependencies
 	cd $WEBROOT
-	su -c "composer install --no-dev --no-interaction --optimize-autoloader" $SUDO_USER &>> $LOGFILE
-	su -c "php artisan key:generate --force" $SUDO_USER &>> $LOGFILE
-	su -c "php artisan storage:link" $SUDO_USER &>> $LOGFILE
-	su -c "php artisan ziggy:generate" $SUDO_USER &>> $LOGFILE
+	composer install --no-dev --no-interaction --optimize-autoloader --quite >> $LOGFILE
+	php artisan key:generate --force >> $LOGFILE
+	php artisan storage:link >> $LOGFILE
+	php artisan ziggy:generate >> $LOGFILE
 
 	#  Install NPM dependencies
-	su -c "npm install --silent cross-env" $SUDO_USER &>> $LOGFILE
-	su -c "npm install --silent --only=production" $SUDO_USER &>> $LOGFILE
-	su -c "npm run production" $SUDO_USER &>> $LOGFILE
+	# su -c "npm install --silent cross-env" $SUDO_USER &>> $LOGFILE
+	npm install --silent cross-env >> $LOGFILE
+	npm install --silent --only=production cross-env >> $LOGFILE
+	npm run production >> $LOGFILE
 
 	#  Setup DATABASE
-	su -c "php artisan migrate --force" $SUDO_USER &>> $LOGFILE
+	php artisan migrate --force >> $LOGFILE
 
 	#  Cache Files
-	su -c "php artisan config:cache" $SUDO_USER &>> $LOGFILE
-	su -c "php artisan route:cache" $SUDO_USER &>> $LOGFILE
+	php artisan config:cache >> $LOGFILE
+	php artisan route:cache >> $LOGFILE
+
+
+
+exit 0
+
 
 	# Setup Supervisor service to work email queue
-	# touch $WORKERFILE
-	# echo "#  The laravel-worker program will ensure the queue:work command " >> $WORKERFILE
-	# echo "#  is constantly running." >> $WORKERFILE
-	# echo "" >> $WORKERFILE
-	# echo "[program:laravel-worker]" >> $WORKERFILE
-	# echo "process_name=%(program_name)s_%(process_num)02d" >> $WORKERFILE
-	# echo "command=php $WEBROOT/artisan queue:work --sleep=3 --tries=3" >> $WORKERFILE
-	# echo "autostart=true" >> $WORKERFILE
-	# echo "autorestart=true" >> $WORKERFILE
-	# echo "user=www-data" >> $WORKERFILE
-	# echo "numprocs=8" >> $WORKERFILE
-	# echo "redirect_stderr=true" >> $WORKERFILE
-	# echo "stdout_logfile=$WEBROOT/storage/logs/worker.log" >> $WORKERFILE
+	touch $WORKERFILE
+	echo "#  The laravel-worker program will ensure the queue:work command " >> $WORKERFILE
+	echo "#  is constantly running." >> $WORKERFILE
+	echo "" >> $WORKERFILE
+	echo "[program:laravel-worker]" >> $WORKERFILE
+	echo "process_name=%(program_name)s_%(process_num)02d" >> $WORKERFILE
+	echo "command=php $WEBROOT/artisan queue:work --sleep=3 --tries=3" >> $WORKERFILE
+	echo "autostart=true" >> $WORKERFILE
+	echo "autorestart=true" >> $WORKERFILE
+	echo "user=www-data" >> $WORKERFILE
+	echo "numprocs=8" >> $WORKERFILE
+	echo "redirect_stderr=true" >> $WORKERFILE
+	echo "stdout_logfile=$WEBROOT/storage/logs/worker.log" >> $WORKERFILE
 
-	# # Start the Supervisor service
-	# supervisorctl reread >> $LOGFILE
-	# supervisorctl update >> $LOGFILE
-	# supervisorctl start laravel-worker:* >> $LOGFILE
+	# Start the Supervisor service
+	supervisorctl reread # >> $LOGFILE
+	supervisorctl update # >> $LOGFILE
+	supervisorctl start laravel-worker:* # >> $LOGFILE
 
-	# # Setup the cron file for all Scheduled Tasks performed by the Tech Bench
-	# touch $CRONFILE
-	# echo "#  The laravel-jobs cron job is to run any scheduled tasks performed by the Tech Bench" >> $CRONFILE
-	# echo "" >> $CRONFILE
-	# echo "* * * * * cd $WEBROOT && php artisan schedule:run >> /dev/null 2>&1" >> $CRONFILE
+	# Setup the cron file for all Scheduled Tasks performed by the Tech Bench
+	touch $CRONFILE
+	echo "#  The laravel-jobs cron job is to run any scheduled tasks performed by the Tech Bench" >> $CRONFILE
+	echo "" >> $CRONFILE
+	echo "* * * * * cd $WEBROOT && php artisan schedule:run >> /dev/null 2>&1" >> $CRONFILE
 
 	killSpin
-	exit 0
 }
 
 cleanup()

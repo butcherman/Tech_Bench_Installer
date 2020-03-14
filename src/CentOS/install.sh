@@ -929,7 +929,7 @@ SCRIPT
 	#  Install NPM dependencies
 	echo '     Building Website'
 	npm install --silent cross-env >> $LOGFILE 2>&1
-	npm install --silent --only=production cross-env >> $LOGFILE 2>&1
+	npm install --silent --only=production >> $LOGFILE 2>&1
 	npm run production >> $LOGFILE 2>&1
 
 	#  Setup DATABASE
@@ -976,8 +976,9 @@ cleanup()
 
 	#  Set file permissions and owner
 	chown -R nginx:nginx $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
-	find $WEBROOT -type f -exec chmod 644 {} \; >> $LOGFILE
-	find $WEBROOT -type d -exec chmod 755 {} \; >> $LOGFILE
+	find $WEBROOT/ -type f -exec chmod 644 {} \; >> $LOGFILE
+	find $WEBROOT/ -type d -exec chmod 755 {} \; >> $LOGFILE
+	chmod -R $WEBROOT/storage 777 >> $LOGFILE
 
 	#  Lock down the config file and .htaccess
 	chmod 600 $WEBROOT/.env >> $LOGFILE

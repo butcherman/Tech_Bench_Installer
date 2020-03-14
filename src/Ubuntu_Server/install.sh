@@ -235,6 +235,7 @@ help()
 check()
 {
 	LOGFILE=\/dev\/null
+
 	if [ $INSTALL == 't' ] || [ $INSTALL == 'true' ]; then
 		MANUAL=false
 	else

@@ -88,9 +88,6 @@ TODO:  finish this
 
 
 
-
-
-
 You can now visit the web page for the Tech Bench application by browsing to the URL noted in the .env file under APP_URL
 
 Default login is:

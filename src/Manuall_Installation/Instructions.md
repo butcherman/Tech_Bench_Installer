@@ -76,6 +76,18 @@ From a command prompt, navigate to the Web Document Root folder and enter the fo
 
     ```php artisan migrate --force```
 
+## Post Installation Instructions
+
+In order for email notifications to be sent properly, the Supervisor Service must be configured to run the ```work:queue``` command
+
+
+TODO:  finish this
+
+
+
+
+
+
 You can now visit the web page for the Tech Bench application by browsing to the URL noted in the .env file under APP_URL
 
 Default login is:

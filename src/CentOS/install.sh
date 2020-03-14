@@ -22,8 +22,9 @@ SCRIPTROOT=$(pwd)
 LOGFILE=$SCRIPTROOT/TB_Install.log
 WEBROOT=\/var\/www\/html
 USEFILE=null
-WORKERFILE=/etc/supervisor/conf.d/laravel-worker.conf
-CRONFILE=/etc/cron.d/laravel-jobs
+WORKERFILE=/etc/supervisord.d/tech-bench-worker.ini
+CRONFILE=/etc/cron.d/tech-bench-jobs
+TBTMP=$SCRIPTROOT/tb_tmp
 
 #  Install Data Variables
 WebURL=localhost
@@ -32,7 +33,6 @@ SSLOnly=true
 DBName=techbench
 DBUser=tbUser
 DBPass=null
-ROOTPass=null
 VIRDIR=true
 DISVIR=true
 
@@ -41,6 +41,10 @@ if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"  | tee $LOGFILE
    exit 1
 fi
+
+#  Make temporary directory for holding tmp files
+mkdir $TBTMP
+cd $TBTMP
 
 #  Touch the log file and make sure it can be writen to by both the sudo user and normal user
 touch $LOGFILE && chmod 777 $LOGFILE
@@ -114,30 +118,13 @@ main()
 			fi
 		done
 
-		#  Get the root password for the database
-		if [ $DBUser != 'root' ]; then
-			echo 'For the database installation, we will need to get the password of the root user'
-			read -p 'Please enter the password for the MySQL root user: ' ROOTPass
-		else
-			ROOTPass=$DBPASS
-		fi
-
 		#  Ask if virtual directories are already built
 		echo ''
-		read -p 'Build custom virtual sites for Tech Bench (Recommended)? [Y/N]: ' VIRDIR
+		read -p 'Update existing virtual sites for Tech Bench (Recommended)? [Y/N]: ' VIRDIR
 		if [[ $VIRDIR =~ [Nn]$ ]]; then
 			VIRDIR=false
 		else
 			VIRDIR=true
-		fi
-
-		#  Ask to disable any existing virtual directories
-		echo ''
-		read -p 'Disable any existing virtual directories? [Y/N]: ' DISVIR
-		if [[ $DISVIR =~ [Yy]$ ]]; then
-			DISVIR=true
-		else
-			DISVIR=false
 		fi
 	fi
 
@@ -173,7 +160,7 @@ main()
 	checkPackage
 	installPackage
 
-	#  Create new virtual directory files for the Tech Bench site
+	# #  Create new virtual directory files for the Tech Bench site
 	if [ $VIRDIR == 'true' ]; then
 		writeConfFiles
 	fi
@@ -235,7 +222,6 @@ help()
 check()
 {
 	LOGFILE=\/dev\/null
-
 	if [ $INSTALL == 't' ] || [ $INSTALL == 'true' ]; then
 		MANUAL=false
 	else
@@ -271,7 +257,7 @@ check()
 checkPrereqs()
 {
 	#  Check for web server
-	checkApache
+	checkNginx
 	checkMysql
 	checkPHP
 
@@ -287,34 +273,37 @@ checkPrereqs()
 	checkUnzip
 	checkSupervisor
 
-	#  Restart Apache if the prerequisites were installed
+	#  Restart NGINX if the prerequisites were installed
 	if [ $MANUAL == 'false' ]; then
-		systemctl reload apache2 >> $LOGFILE
+		systemctl restart nginx >> $LOGFILE 2>&1
 	fi
 }
 
-#  Check Apache is installed and running
-checkApache()
+checkNginx()
 {
-    printf 'Apache                                                      ' | tee -a $LOGFILE
-    if systemctl is-active --quiet apache2; then
+	printf 'Nginx                                                       ' | tee -a $LOGFILE
+    if systemctl is-active --quiet nginx; then
         tput setaf 2
         echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
-		echo 'Apache is not Installed' >> $LOGFILE 2>&1
-		echo 'Installing LAMP Server' >> $LOGFILE 2>&1
+		echo 'Nginx is not Installed' >> $LOGFILE 2>&1
+		echo 'Installing Nginx Server' >> $LOGFILE 2>&1
 		echo -en '[INSTALLING] '
 		startSpin
-		apt-get -q update >> $LOGFILE
-		apt-get -q install lamp-server^ -y >> $LOGFILE 2>&1
 
-		#  Get the location of the php.ini file and update the upload_max_filesize paramater
-#		PHPINI=$(php -i | grep php.ini | head -n 1 | cut -d " " -f 6)
-#		sed -i 's,^upload_max_filesize =.*$,post_max_size = 6M,' $PHPINI/php.ini
+		#  Install NGINX and register the service
+		yum -q install nginx -y >> $LOGFILE 2>&1
+        systemctl enable nginx >> $LOGFILE 2>&1
+        systemctl start nginx >> $LOGFILE 2>&1
+
+		#  Open http and https services on internal firewall
+		firewall-cmd --permanent --zone=public --add-service=http >> /dev/null 2>&1
+		firewall-cmd --permanent --zone=public --add-service=https >> /dev/null 2>&1
+		firewall-cmd --reload >> /dev/null 2>&1
+		setenforce disabled >> /dev/null 2>&1
 
 		echo -ne '\b\b\b\b\bED]      \n'
-		echo 'LAMP Server Installed' >> $LOGFILE 2>&1
-		WASINS=true
+		echo 'Nginx Installed' >> $LOGFILE 2>&1
 		killSpin
     else
         tput setaf 1
@@ -329,12 +318,19 @@ checkMysql()
 {
     printf 'MySQL                                                       ' | tee -a $LOGFILE
     if systemctl is-active --quiet mysql; then
-        if [ $WASINS == 'false' ]; then
-			tput setaf 2
-			echo '[PASS]' | tee -a $LOGFILE
-		else
-			echo '[INSTALLED]' | tee -a $LOGFILE
-		fi
+        tput setaf 2
+        echo '[PASS]' | tee -a $LOGFILE
+    elif [ $MANUAL == 'false' ]; then
+        echo 'MySQL is not Installed' >> $LOGFILE 2>&1
+		echo 'Installing MySQL' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING] '
+		startSpin
+		yum -q install mariadb-server mariadb -y >> $LOGFILE 2>&1
+        systemctl start mariadb >> $LOGFILE 2>&1
+        systemctl enable mariadb.service >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\b\bED]      \n'
+		echo 'MySQL Installed' >> $LOGFILE 2>&1
+		killSpin
     else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -350,17 +346,29 @@ checkPHP()
     if hash php 2>/dev/null; then
         PHPVersion=$(php --version | head -n 1 | cut -d " " -f 2 | cut -c 1,3)
         if (($PHPVersion >= $minimumPHPVer)); then
-            if [ $WASINS == 'false' ]; then
-				tput setaf 2
-				echo '[PASS]' | tee -a $LOGFILE
-			else
-				echo '[INSTALLED]' | tee -a $LOGFILE
-			fi
+			tput setaf 2
+			echo '[PASS]' | tee -a $LOGFILE
         else
             tput setaf 1
             echo '[FAIL]' | tee -a $LOGFILE
             PREREQ=false
         fi
+	elif [ $MANUAL == 'false' ]; then
+        echo 'PHP is not Installed' >> $LOGFILE 2>&1
+		echo 'Installing PHP' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING] '
+		startSpin
+		yum -q install php -y >> $LOGFILE 2>&1
+
+		#  Get the location of the php.ini file and update the upload_max_filesize paramater
+		PHPINI=$(php -i | grep php.ini | head -n 1 | cut -d " " -f 6)
+		sed -i 's,^upload_max_filesize =.*$,upload_max_filesize = 6M,' $PHPINI/php.ini
+
+		#  Restart nginx to load new settings
+		systemctl restart nginx >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\b\bED]      \n'
+		echo 'PHP Installed' >> $LOGFILE 2>&1
+		killSpin
     else
         tput setaf 1
         echo '[FAIL]' | tee -a $LOGFILE
@@ -384,9 +392,9 @@ checkModules()
 			echo '[INSTALLED]' | tee -a $LOGFILE
 		fi
 	elif [ $MANUAL == 'false' ]; then
-		echo -en '[INSTALLING]'
+		echo -en '[INSTALLING] '
 		startSpin
-		apt-get -q install php-dom -y >> $LOGFILE 2>&1
+		yum -q install php-dom -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo '[INSTALLED]' >> $LOGFILE 2>&1
 		killSpin
@@ -406,9 +414,9 @@ checkModules()
             echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
 		echo 'PHP-ZIP Module is not Installed.  Installing' >> $LOGFILE 2>&1
-		echo -en '[INSTALLING]'
+		echo -en '[INSTALLING] '
 		startSpin
-		apt-get -q install php-zip -y >> $LOGFILE 2>&1
+		yum -q install php-zip -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo 'PHP-ZIP Module Installed' >> $LOGFILE 2>&1
 		killSpin
@@ -428,9 +436,9 @@ checkModules()
             echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
 		echo 'PHP-GD Module is not Installed.  Installing' >> $LOGFILE 2>&1
-		echo -en '[INSTALLING]'
+		echo -en '[INSTALLING] '
 		startSpin
-		apt-get -q install php-gd -y >> $LOGFILE 2>&1
+		yum -q install php-gd -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
 		echo 'PHP-GD Module Installed' >> $LOGFILE 2>&1
 		killSpin
@@ -440,6 +448,75 @@ checkModules()
         PREREQ=false
     fi
     tput sgr0
+
+	#  PHP-PDO Module
+	printf 'PHP-PDO Module                                              ' | tee -a $LOGFILE
+	PDOMod=$(php -m | grep -c pdo)
+
+	if (( $PDOMod > 0 )); then
+		tput setaf 2
+            echo '[PASS]' | tee -a $LOGFILE
+	elif [ $MANUAL == 'false' ]; then
+		echo 'PHP-PDO Module is not Installed.  Installing' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING] '
+		startSpin
+		yum -q install php-pdo -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      \n'
+		echo 'PHP-PDO Module Installed' >> $LOGFILE 2>&1
+		killSpin
+    else
+        tput setaf 1
+        echo '[FAIL]' | tee -a $LOGFILE
+        PREREQ=false
+    fi
+    tput sgr0
+
+	#  PHP-MBSTRING Module
+	printf 'PHP-MBSTRING Module                                         ' | tee -a $LOGFILE
+	MBSMod=$(php -m | grep -c mbstring)
+
+	if (( $MBSMod > 0 )); then
+		tput setaf 2
+            echo '[PASS]' | tee -a $LOGFILE
+	elif [ $MANUAL == 'false' ]; then
+		echo 'PHP-MBSTRING Module is not Installed.  Installing' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING] '
+		startSpin
+		yum -q install php-mbstring -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      \n'
+		echo 'PHP-MBSTRING Module Installed' >> $LOGFILE 2>&1
+		killSpin
+    else
+        tput setaf 1
+        echo '[FAIL]' | tee -a $LOGFILE
+        PREREQ=false
+    fi
+    tput sgr0
+
+	#  PHP-MYSQLND Module
+	printf 'PHP-MYSQLND Module                                          ' | tee -a $LOGFILE
+	MBMYMod=$(php -m | grep -c mysqlnd)
+
+	if (( $MBMYMod > 0 )); then
+		tput setaf 2
+            echo '[PASS]' | tee -a $LOGFILE
+	elif [ $MANUAL == 'false' ]; then
+		echo 'PHP-MYSQLND Module is not Installed.  Installing' >> $LOGFILE 2>&1
+		echo -en '[INSTALLING] '
+		startSpin
+		yum -q install php-mysqlnd -y >> $LOGFILE 2>&1
+		echo -ne '\b\b\b\bED]      \n'
+		echo 'PHP-MYSQLND Module Installed' >> $LOGFILE 2>&1
+		killSpin
+    else
+        tput setaf 1
+        echo '[FAIL]' | tee -a $LOGFILE
+        PREREQ=false
+    fi
+    tput sgr0
+
+	#  Restart NGINX to apply all modules
+	systemctl restart nginx
 }
 
 # Check if Composer is installed
@@ -451,9 +528,11 @@ checkComposer()
 	if [[ $COMPOSER -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
 			echo 'Composer is not Installed.  Installing' >> $LOGFILE 2>&1
-			echo -en '[INSTALLING]'
+			echo -en '[INSTALLING] '
 			startSpin
-			apt-get -q install composer -y >> $LOGFILE 2>&1
+			yum -q install php-json -y >> $LOGFILE 2>&1
+			curl -s https://getcomposer.org/installer -o composer-installer.php >> $LOGFILE 2>&1
+			php composer-installer.php --install-dir=/usr/local/bin --filename=composer >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
 			echo 'Composer Installed' >> $LOGFILE 2>&1
 			killSpin
@@ -478,9 +557,9 @@ checkNodeJS()
 	if [[ $NODE -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
 		echo 'NodeJS is not Installed.  Installing' >> $LOGFILE 2>&1
-			echo -en '[INSTALLING]'
+			echo -en '[INSTALLING] '
 			startSpin
-			apt-get -q install nodejs -y >> $LOGFILE 2>&1
+			yum -q install nodejs -y >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
 			echo 'NodeJS Installed' >> $LOGFILE 2>&1
 			killSpin
@@ -505,7 +584,7 @@ checkNPM()
 	if [[ $NODE -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
 			echo 'NPM is not Installed.  Installing' >> $LOGFILE 2>&1
-			echo -en '[INSTALLING]'
+			echo -en '[INSTALLING] '
 			startSpin
 			mkdir npm && cd npm/
 			curl -s https://www.npmjs.com/install.sh | sh  >> $LOGFILE 2>&1
@@ -550,11 +629,16 @@ checkSupervisor()
 	if [[ $NODE -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
 			echo 'Supervisor is not Installed.  Installing' >> $LOGFILE 2>&1
-			echo -en '[INSTALLING]'
+			echo -en '[INSTALLING] '
 			startSpin
-			apt-get install supervisor -y >> $LOGFILE 2>&1
+			yum -q install epel-release -y >> $LOGFILE 2>&1
+			yum -q install supervisor -y >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n\n'
 			echo 'Supervisor Installed' >> $LOGFILE 2>&1
+
+			systemctl enable supervisord
+			systemctl start supervisord
+
 			killSpin
 		else
 			tput setaf 1
@@ -571,12 +655,13 @@ checkSupervisor()
 #  Check for the proper installation package
 checkPackage()
 {
+	cd $SCRIPTROOT
 	FILELIST=(`find . -maxdepth 1 -not -type d | grep Tech_Bench | tr -d .\/zip`)
 	LISTLEN=${#FILELIST[*]}
 	USEINDEX=null
 
 	if [ "$BRANCH" != 'null' ]; then
-		echo 'Downloading Branch '$BRANCH
+		printf 'Downloading Branch '$BRANCH
 		startSpin
 		USEFILE=Tech_Bench_$BRANCH.zip
 		RESPONSE=$(wget --server-response -O $USEFILE https://api.github.com/repos/butcherman/tech_bench/zipball/$BRANCH 2>&1 | awk '/^  HTTP/{print $2}')
@@ -590,7 +675,7 @@ checkPackage()
 		fi
 		killSpin
 	elif [ $LISTLEN == 0 ]; then
-		echo 'Downloading latest Tech Bench release'
+		printf 'Downloading latest Tech Bench release'
 		startSpin
 		USEFILE=Tech_Bench_latest.zip
 		GETURL=$(curl -s https://api.github.com/repos/butcherman/tech_bench/releases/latest | grep zipball_url | cut -d : -f 2,3 | tr -d \" | tr -d \,)
@@ -629,11 +714,10 @@ checkPackage()
 #  Move the installation files to the WebRoot directory
 installPackage()
 {
-	#  Add the current user to the www-data group
-	usermod -a -G www-data $SUDO_USER
+	mkdir -p $WEBROOT
 
 	#  Unzip installation files
-	echo 'Extracting Files'
+	printf 'Extracting Files'
 	startSpin
 	DIRNAME=$(zipinfo -1 $USEFILE | grep -o "^[^/]\+[/]" | sort -u | tr -d \/)
 	unzip -o $USEFILE >> $LOGFILE
@@ -663,8 +747,8 @@ installPackage()
 	#  Write the configuration settings to the .env file
 	sed -i "s/APP_URL=http:\/\/localhost/APP_URL=$FullURL/g" $WEBROOT/.env
 	sed -i "s/DB_DATABASE=tech-bench/DB_DATABASE=$DBName/g" $WEBROOT/.env
-	sed -i "s/DB_USERNAME=root/DB_USERNAME=root/g" $WEBROOT/.env        #  $DBUser/g" $WEBROOT/.env
-	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$ROOTPass/g" $WEBROOT/.env
+	sed -i "s/DB_USERNAME=root/DB_USERNAME=$DBUser/g" $WEBROOT/.env
+	sed -i "s/DB_PASSWORD=/DB_PASSWORD=$DBPass/g" $WEBROOT/.env
 
 	killSpin
 }
@@ -672,132 +756,201 @@ installPackage()
 #  Write new apache config files
 writeConfFiles()
 {
-	echo 'Creating Apache Virtual Directories'
+	NGINXCONFIG=/etc/nginx/nginx.conf
+
+	printf '\nUpdating NGINX Config'
 	startSpin
 
-	#  Disable any existing sites on the server
-	ENABLEDSITES=(`ls /etc/apache2/sites-enabled`)
-	ENABLEDLENGTH=${#ENABLEDSITES[*]}
-	if [ $ENABLEDLENGTH -ne 0 ]; then
-		i=0
-		while [ $i -lt $ENABLEDLENGTH ]; do
-			a2dissite ${ENABLEDSITES[$i]} >> $LOGFILE
-			let i++
-		done
-	fi
+	#  Move existing config to config.old
+	mv $NGINXCONFIG $NGINXCONFIG.old
 
-	#  Create the new http site
-	touch /etc/apache2/sites-available/TechBench.conf
-	echo '<VirtualHost *:80>' > /etc/apache2/sites-available/TechBench.conf
-	echo '	ServerAdmin webmaster@localhost' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	DocumentRoot /var/www/html/public' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	<Directory "/var/www/html/public">' >> /etc/apache2/sites-available/TechBench.conf
-	echo '		Options Indexes FollowSymLinks MultiViews' >> /etc/apache2/sites-available/TechBench.conf
-	echo '		AllowOverride All' >> /etc/apache2/sites-available/TechBench.conf
-	echo '		Order allow,deny' >> /etc/apache2/sites-available/TechBench.conf
-	echo '		Allow from all' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	</Directory>' >> /etc/apache2/sites-available/TechBench.conf
-	echo '' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	ErrorLog ${APACHE_LOG_DIR}/error.log' >> /etc/apache2/sites-available/TechBench.conf
-	echo '	CustomLog ${APACHE_LOG_DIR}/access.log combined' >> /etc/apache2/sites-available/TechBench.conf
+	#  Write a new config
+	touch /etc/nginx/nginx.conf
+	echo ' user nginx;' >> $NGINXCONFIG
+	echo ' worker_processes auto;' >> $NGINXCONFIG
+	echo ' error_log /var/log/nginx/error.log;' >> $NGINXCONFIG
+	echo ' pid /run/nginx.pid;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' include /usr/share/nginx/modules/*.conf;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' events {' >> $NGINXCONFIG
+	echo ' 	worker_connections 1024;' >> $NGINXCONFIG
+	echo ' }' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' http {' >> $NGINXCONFIG
+	echo ' 	log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '' >> $NGINXCONFIG
+	echo ' 					'$status $body_bytes_sent "$http_referer" '' >> $NGINXCONFIG
+	echo ' 					'"$http_user_agent" "$http_x_forwarded_for"';' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	access_log  /var/log/nginx/access.log  main;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	sendfile            on;' >> $NGINXCONFIG
+	echo ' 	tcp_nopush          on;' >> $NGINXCONFIG
+	echo ' 	tcp_nodelay         on;' >> $NGINXCONFIG
+	echo ' 	keepalive_timeout   65;' >> $NGINXCONFIG
+	echo ' 	types_hash_max_size 2048;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	include             /etc/nginx/mime.types;' >> $NGINXCONFIG
+	echo ' 	default_type        application/octet-stream;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	include /etc/nginx/conf.d/*.conf;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	server {' >> $NGINXCONFIG
+	echo ' 		listen       80 default_server;' >> $NGINXCONFIG
+	echo ' 		listen       [::]:80 default_server;' >> $NGINXCONFIG
+	echo ' 		server_name  _;' >> $NGINXCONFIG
 	if [ $SSLOnly == 'true' ]; then
-		echo ''	 >> /etc/apache2/sites-available/TechBench.conf
-		echo '	RewriteEngine on' >> /etc/apache2/sites-available/TechBench.conf
-		echo '	RewriteCond %{SERVER_NAME} ='$WebURL' [OR]' >> /etc/apache2/sites-available/TechBench.conf
-        echo '	RewriteCond %{SERVER_NAME} ='$FullURL >> /etc/apache2/sites-available/TechBench.conf
-        echo '	RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]' >> /etc/apache2/sites-available/TechBench.conf
-		echo '' >> /etc/apache2/sites-available/TechBench.conf
+		echo '' >> $NGINXCONFIG
+		echo '		return 302 https://'$WebURL'$request_uri;' >> $NGINXCONFIG
+		echo '' >> $NGINXCONFIG
 	fi
-	echo '</VirtualHost>' >> /etc/apache2/sites-available/TechBench.conf
+	echo " 		root $WEBROOT/public;" >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		add_header X-Frame-Options "SAMEORIGIN";' >> $NGINXCONFIG
+	echo ' 		add_header X-XSS-Protection "1; mode=block";' >> $NGINXCONFIG
+	echo ' 		add_header X-Content-Type-Options "nosniff";' >> $NGINXCONFIG
+	echo ' 	' >> $NGINXCONFIG
+	echo ' 		index index.php' >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		charset utf-8;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		include /etc/nginx/default.d/*.conf;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location / {' >> $NGINXCONFIG
+	echo ' 			try_files $uri $uri/ /index.php?$query_string;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		location = /favicon.ico { access_log off; log_not_found off; }' >> $NGINXCONFIG
+	echo ' 		location = /robots.txt  { access_log off; log_not_found off; }' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		error_page 404 /index.php;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location ~ \.php$ {' >> $NGINXCONFIG
+	echo ' 			fastcgi_pass unix:/var/run/php/php7.2-fpm.sock;' >> $NGINXCONFIG
+	echo ' 			fastcgi_index index.php;' >> $NGINXCONFIG
+	echo ' 			fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;' >> $NGINXCONFIG
+	echo ' 			include fastcgi_params;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location ~ /\.(?!well-known).* {' >> $NGINXCONFIG
+	echo ' 			deny all;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' 	}' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 	# Settings for a TLS enabled server.' >> $NGINXCONFIG
+	echo ' 	server {' >> $NGINXCONFIG
+	echo ' 		listen       443 ssl http2 default_server;' >> $NGINXCONFIG
+	echo ' 		listen       [::]:443 ssl http2 default_server;' >> $NGINXCONFIG
+	echo ' 		server_name  _;' >> $NGINXCONFIG
+	echo " 		root         $WEBROOT/public;" >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		add_header X-Frame-Options "SAMEORIGIN";' >> $NGINXCONFIG
+	echo ' 		add_header X-XSS-Protection "1; mode=block";' >> $NGINXCONFIG
+	echo ' 		add_header X-Content-Type-Options "nosniff";' >> $NGINXCONFIG
+	echo ' 	' >> $NGINXCONFIG
+	echo ' 		index index.php;' >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		charset utf-8;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		ssl_certificate "'$WEBROOT'/keystore/cert/server.crt";' >> $NGINXCONFIG
+	echo ' 		ssl_certificate_key "'$WEBROOT'/keystore/cert/private/server.key";' >> $NGINXCONFIG
+	echo ' 		ssl_session_cache shared:SSL:1m;' >> $NGINXCONFIG
+	echo ' 		ssl_session_timeout  10m;' >> $NGINXCONFIG
+	echo ' 		ssl_ciphers PROFILE=SYSTEM;' >> $NGINXCONFIG
+	echo ' 		ssl_prefer_server_ciphers on;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		include /etc/nginx/default.d/*.conf;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location / {' >> $NGINXCONFIG
+	echo ' 			try_files $uri $uri/ /index.php?$query_string;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' 		' >> $NGINXCONFIG
+	echo ' 		location = /favicon.ico { access_log off; log_not_found off; }' >> $NGINXCONFIG
+	echo ' 		location = /robots.txt  { access_log off; log_not_found off; }' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		error_page 404 /index.php;' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location ~ \.php$ {' >> $NGINXCONFIG
+	echo ' 			fastcgi_pass unix:/var/run/php/php7.2-fpm.sock;' >> $NGINXCONFIG
+	echo ' 			fastcgi_index index.php;' >> $NGINXCONFIG
+	echo ' 			fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;' >> $NGINXCONFIG
+	echo ' 			include fastcgi_params;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' ' >> $NGINXCONFIG
+	echo ' 		location ~ /\.(?!well-known).* {' >> $NGINXCONFIG
+	echo ' 			deny all;' >> $NGINXCONFIG
+	echo ' 		}' >> $NGINXCONFIG
+	echo ' 	}' >> $NGINXCONFIG
+	echo ' }' >> $NGINXCONFIG
 
-	#  Create the new https site
-	touch /etc/apache2/sites-available/SSLTechBench.conf
-	echo '<IfModule mod_ssl.c>' > /etc/apache2/sites-available/SSLTechBench.conf
-	echo '	<VirtualHost *:443>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		ServerAdmin webmaster@localhost' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		DocumentRoot /var/www/html/public' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		<Directory "/var/www/html/public">' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			Options Indexes FollowSymLinks MultiViews' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			AllowOverride All' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			Order allow,deny' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			Allow from all' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		</Directory>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		ErrorLog ${APACHE_LOG_DIR}/error.log' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		CustomLog ${APACHE_LOG_DIR}/access.log combined' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		SSLEngine on' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		SSLCertificateFile	/etc/ssl/certs/ssl-cert-snakeoil.pem' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		SSLCertificateKeyFile /etc/ssl/private/ssl-cert-snakeoil.key' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		<FilesMatch "\.(cgi|shtml|phtml|php)$">' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			SSLOptions +StdEnvVars' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		</FilesMatch>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		<Directory /usr/lib/cgi-bin>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '			SSLOptions +StdEnvVars' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '		</Directory>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '	</VirtualHost>' >> /etc/apache2/sites-available/SSLTechBench.conf
-	echo '</IfModule>' >> /etc/apache2/sites-available/SSLTechBench.conf
+	#  Generate self signed SSL Certificate
+	openssl rand -base64 48 > $TBTMP/passphrase.txt
+	openssl genrsa -aes128 -passout file:$TBTMP/passphrase.txt -out $TBTMP/server.key 2048 >> $LOGFILE 2>&1
+	openssl req -new -passin file:$TBTMP/passphrase.txt -key $TBTMP/server.key -out $TBTMP/server.csr \
+		-subj "/C=FR/O=tb/OU=Domain Control Validated/CN=*.tb.io" >> $LOGFILE 2>&1
+	cp $TBTMP/server.key $TBTMP/server.key.org >> $LOGFILE 2>&1
+	openssl rsa -in $TBTMP/server.key.org -passin file:$TBTMP/passphrase.txt -out $TBTMP/server.key >> $LOGFILE 2>&1
+	openssl x509 -req -days 36500 -in $TBTMP/server.csr -signkey $TBTMP/server.key -out $TBTMP/server.crt >> $LOGFILE 2>&1
 
-	#  Enable the necessary modules
-	a2enmod rewrite ssl >> $LOGFILE
+	#  Move the new certificate and key to the Tech Bench directory
+	mkdir -p $WEBROOT/keystore/cert/private >> $LOGFILE 2>&1
+	mv $TBTMP/server.crt $WEBROOT/keystore/cert/server.crt >> $LOGFILE 2>&1
+	mv $TBTMP/server.key $WEBROOT/keystore/cert/private/server.key >> $LOGFILE 2>&1
 
-	#  Enable the new sites
-	a2ensite TechBench.conf SSLTechBench.conf >> $LOGFILE
-
-	#  Restart Apache
-	systemctl reload apache2 >> $LOGFILE
-
+	#  Restart NGINX
+	systemctl restart nginx >> $LOGFILE
 	killSpin
 }
 
 #  Download all dependencies from composer and NPM and setup application
 setupApplication()
 {
-	printf 'Creating Tech Bench Application '
+	printf '\nCreating Tech Bench Application (this may take some time) \n\n'
 	startSpin
 	#  If the installer is not being done manually, create the database and database user
 	if [ $MANUAL == 'false' ]; then
 		mysql <<SCRIPT
-			ALTER USER 'root'@'localhost' IDENTIFIED BY '$DBPASS';
-			ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DBPASS';
 			CREATE DATABASE IF NOT EXISTS \`$DBName\`;
-			CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED WITH mysql_native_password BY '$DBPass';
+			CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED BY '$DBPass';
 			GRANT ALL PRIVILEGES ON \`$DBName\`.* TO '$DBUser'@'localhost' WITH GRANT OPTION;
-#			GRANT SELECT ON \`information_schema\`.* TO '$DBUser'@'localhost';
+			GRANT SELECT ON *.* TO '$DBUser'@'localhost';
 			FLUSH PRIVILEGES;
 SCRIPT
 	fi
 
 	#  Install composer dependencies
+	echo '     Downloading additional data files'
 	cd $WEBROOT
-	su -c "composer install --no-dev --no-interaction --optimize-autoloader" $SUDO_USER &>> $LOGFILE
-	su -c "php artisan key:generate --force" $SUDO_USER &>> $LOGFILE
-	su -c "php artisan storage:link" $SUDO_USER &>> $LOGFILE
-	su -c "php artisan ziggy:generate" $SUDO_USER &>> $LOGFILE
+	composer install --no-dev --no-interaction --optimize-autoloader >> $LOGFILE 2>&1
+	php artisan key:generate --force >> $LOGFILE 2>&1
+	php artisan storage:link >> $LOGFILE 2>&1
+	php artisan ziggy:generate >> $LOGFILE 2>&1
 
 	#  Install NPM dependencies
-	su -c "npm install --silent cross-env" $SUDO_USER &>> $LOGFILE
-	su -c "npm install --silent --only=production" $SUDO_USER &>> $LOGFILE
-	su -c "npm run production" $SUDO_USER &>> $LOGFILE
+	echo '     Building Website'
+	npm install --silent cross-env >> $LOGFILE 2>&1
+	npm install --silent --only=production cross-env >> $LOGFILE 2>&1
+	npm run production >> $LOGFILE 2>&1
 
 	#  Setup DATABASE
-	su -c "php artisan migrate --force" $SUDO_USER &>> $LOGFILE
+	echo '     Building Database'
+	php artisan migrate --force >> $LOGFILE 2>&1
 
 	#  Cache Files
-	su -c "php artisan config:cache" $SUDO_USER &>> $LOGFILE
-	su -c "php artisan route:cache" $SUDO_USER &>> $LOGFILE
+	php artisan config:cache >> $LOGFILE 2>&1
+	php artisan route:cache >> $LOGFILE 2>&1
 
 	# Setup Supervisor service to work email queue
 	touch $WORKERFILE
-	echo "#  The laravel-worker program will ensure the queue:work command " >> $WORKERFILE
+	echo "#  The tech-bench-worker program will ensure the queue:work command " > $WORKERFILE
 	echo "#  is constantly running." >> $WORKERFILE
 	echo "" >> $WORKERFILE
-	echo "[program:laravel-worker]" >> $WORKERFILE
+	echo "[program:tech-bench-worker]" >> $WORKERFILE
 	echo "process_name=%(program_name)s_%(process_num)02d" >> $WORKERFILE
 	echo "command=php $WEBROOT/artisan queue:work --sleep=3 --tries=3" >> $WORKERFILE
 	echo "autostart=true" >> $WORKERFILE
 	echo "autorestart=true" >> $WORKERFILE
-	echo "user=www-data" >> $WORKERFILE
+	echo "user=nginx" >> $WORKERFILE
 	echo "numprocs=8" >> $WORKERFILE
 	echo "redirect_stderr=true" >> $WORKERFILE
 	echo "stdout_logfile=$WEBROOT/storage/logs/worker.log" >> $WORKERFILE
@@ -805,11 +958,11 @@ SCRIPT
 	# Start the Supervisor service
 	supervisorctl reread >> $LOGFILE
 	supervisorctl update >> $LOGFILE
-	supervisorctl start laravel-worker:* >> $LOGFILE
+	supervisorctl start tech-bench-worker:* >> $LOGFILE
 
 	# Setup the cron file for all Scheduled Tasks performed by the Tech Bench
 	touch $CRONFILE
-	echo "#  The laravel-jobs cron job is to run any scheduled tasks performed by the Tech Bench" >> $CRONFILE
+	echo "#  The tech-bench-jobs cron job is to run any scheduled tasks performed by the Tech Bench" >> $CRONFILE
 	echo "" >> $CRONFILE
 	echo "* * * * * cd $WEBROOT && php artisan schedule:run >> /dev/null 2>&1" >> $CRONFILE
 
@@ -821,12 +974,8 @@ cleanup()
 	printf '\nCleaning Up '
 	startSpin
 
-	#  Update the .env file to use the proper user for the database access
-	sed -i "s/DB_USERNAME=root/DB_USERNAME=$DBUser/g" $WEBROOT/.env
-	sed -i "s/DB_PASSWORD=$ROOTPass/DB_PASSWORD=$DBPASS/g" $WEBROOT/.env
-
 	#  Set file permissions and owner
-	chown -R www-data:www-data $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
+	chown -R nginx:nginx $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
 	find $WEBROOT -type f -exec chmod 644 {} \; >> $LOGFILE
 	find $WEBROOT -type d -exec chmod 755 {} \; >> $LOGFILE
 
@@ -836,7 +985,7 @@ cleanup()
 
 	#  Delete the files created by the installer
 	find $SCRIPTROOT/$USEFILE --delete >> $LOGFILE
-	find $SCRIPTROOT/npm --delete >> $LOGFILE
+	find $TBTMP --delete >> $LOGFILE
 
 	#  Move the installer log into the storage/logs directory
 	mv $LOGFILE $WEBROOT/storage/logs/Tech_Bench_Install.log
@@ -847,7 +996,8 @@ cleanup()
 #  Spinner to show while background processes are running
 spin()
 {
-	spinner="/|\\-/|\\-"
+#	spinner="/|\\-/|\\-"
+	spinner="-\\|/-\\|/"
 	while :
 	do
 		for i in `seq 0 7`

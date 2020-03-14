@@ -22,8 +22,8 @@ SCRIPTROOT=$(pwd)
 LOGFILE=$SCRIPTROOT/TB_Install.log
 WEBROOT=\/var\/www\/html
 USEFILE=null
-WORKERFILE=/etc/supervisor.d/laravel-worker.conf
-CRONFILE=/etc/cron.d/laravel-jobs
+WORKERFILE=/etc/supervisord.d/tech-bench-worker.ini
+CRONFILE=/etc/cron.d/tech-bench-jobs
 TBTMP=$SCRIPTROOT/tb_tmp
 
 #  Install Data Variables
@@ -167,7 +167,7 @@ main()
 
 	#  Load dependencies and build application files
 	setupApplication
-	# cleanup
+	cleanup
 
 	#  Installation finished
 	FullURL=$($FullURL -tr -d \ )
@@ -300,7 +300,7 @@ checkNginx()
 		firewall-cmd --permanent --zone=public --add-service=http >> /dev/null 2>&1
 		firewall-cmd --permanent --zone=public --add-service=https >> /dev/null 2>&1
 		firewall-cmd --reload >> /dev/null 2>&1
-		setenforce permissive >> /dev/null 2>&1
+		setenforce disabled >> /dev/null 2>&1
 
 		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'Nginx Installed' >> $LOGFILE 2>&1
@@ -392,7 +392,7 @@ checkModules()
 			echo '[INSTALLED]' | tee -a $LOGFILE
 		fi
 	elif [ $MANUAL == 'false' ]; then
-		echo -en '[INSTALLING]'
+		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-dom -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
@@ -414,7 +414,7 @@ checkModules()
             echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
 		echo 'PHP-ZIP Module is not Installed.  Installing' >> $LOGFILE 2>&1
-		echo -en '[INSTALLING]'
+		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-zip -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
@@ -436,7 +436,7 @@ checkModules()
             echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
 		echo 'PHP-GD Module is not Installed.  Installing' >> $LOGFILE 2>&1
-		echo -en '[INSTALLING]'
+		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-gd -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
@@ -458,7 +458,7 @@ checkModules()
             echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
 		echo 'PHP-PDO Module is not Installed.  Installing' >> $LOGFILE 2>&1
-		echo -en '[INSTALLING]'
+		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-pdo -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
@@ -480,7 +480,7 @@ checkModules()
             echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
 		echo 'PHP-MBSTRING Module is not Installed.  Installing' >> $LOGFILE 2>&1
-		echo -en '[INSTALLING]'
+		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-mbstring -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
@@ -502,7 +502,7 @@ checkModules()
             echo '[PASS]' | tee -a $LOGFILE
 	elif [ $MANUAL == 'false' ]; then
 		echo 'PHP-MYSQLND Module is not Installed.  Installing' >> $LOGFILE 2>&1
-		echo -en '[INSTALLING]'
+		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-mysqlnd -y >> $LOGFILE 2>&1
 		echo -ne '\b\b\b\bED]      \n'
@@ -528,7 +528,7 @@ checkComposer()
 	if [[ $COMPOSER -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
 			echo 'Composer is not Installed.  Installing' >> $LOGFILE 2>&1
-			echo -en '[INSTALLING]'
+			echo -en '[INSTALLING] '
 			startSpin
 			yum -q install php-json -y >> $LOGFILE 2>&1
 			curl -s https://getcomposer.org/installer -o composer-installer.php >> $LOGFILE 2>&1
@@ -557,7 +557,7 @@ checkNodeJS()
 	if [[ $NODE -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
 		echo 'NodeJS is not Installed.  Installing' >> $LOGFILE 2>&1
-			echo -en '[INSTALLING]'
+			echo -en '[INSTALLING] '
 			startSpin
 			yum -q install nodejs -y >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n'
@@ -584,7 +584,7 @@ checkNPM()
 	if [[ $NODE -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
 			echo 'NPM is not Installed.  Installing' >> $LOGFILE 2>&1
-			echo -en '[INSTALLING]'
+			echo -en '[INSTALLING] '
 			startSpin
 			mkdir npm && cd npm/
 			curl -s https://www.npmjs.com/install.sh | sh  >> $LOGFILE 2>&1
@@ -629,12 +629,16 @@ checkSupervisor()
 	if [[ $NODE -ne 0 ]]; then
 		if [ $MANUAL == 'false' ]; then
 			echo 'Supervisor is not Installed.  Installing' >> $LOGFILE 2>&1
-			echo -en '[INSTALLING]'
+			echo -en '[INSTALLING] '
 			startSpin
 			yum -q install epel-release -y >> $LOGFILE 2>&1
 			yum -q install supervisor -y >> $LOGFILE 2>&1
 			echo -ne '\b\b\b\bED]      \n\n'
 			echo 'Supervisor Installed' >> $LOGFILE 2>&1
+
+			systemctl enable supervisord
+			systemctl start supervisord
+
 			killSpin
 		else
 			tput setaf 1
@@ -657,7 +661,7 @@ checkPackage()
 	USEINDEX=null
 
 	if [ "$BRANCH" != 'null' ]; then
-		echo 'Downloading Branch '$BRANCH
+		printf 'Downloading Branch '$BRANCH
 		startSpin
 		USEFILE=Tech_Bench_$BRANCH.zip
 		RESPONSE=$(wget --server-response -O $USEFILE https://api.github.com/repos/butcherman/tech_bench/zipball/$BRANCH 2>&1 | awk '/^  HTTP/{print $2}')
@@ -671,7 +675,7 @@ checkPackage()
 		fi
 		killSpin
 	elif [ $LISTLEN == 0 ]; then
-		echo 'Downloading latest Tech Bench release'
+		printf 'Downloading latest Tech Bench release'
 		startSpin
 		USEFILE=Tech_Bench_latest.zip
 		GETURL=$(curl -s https://api.github.com/repos/butcherman/tech_bench/releases/latest | grep zipball_url | cut -d : -f 2,3 | tr -d \" | tr -d \,)
@@ -713,7 +717,7 @@ installPackage()
 	mkdir -p $WEBROOT
 
 	#  Unzip installation files
-	echo 'Extracting Files'
+	printf 'Extracting Files'
 	startSpin
 	DIRNAME=$(zipinfo -1 $USEFILE | grep -o "^[^/]\+[/]" | sort -u | tr -d \/)
 	unzip -o $USEFILE >> $LOGFILE
@@ -754,7 +758,7 @@ writeConfFiles()
 {
 	NGINXCONFIG=/etc/nginx/nginx.conf
 
-	echo 'Updating NGINX Config'
+	printf '\nUpdating NGINX Config'
 	startSpin
 
 	#  Move existing config to config.old
@@ -894,7 +898,6 @@ writeConfFiles()
 	mv $TBTMP/server.key $WEBROOT/keystore/cert/private/server.key >> $LOGFILE 2>&1
 
 	#  Restart NGINX
-	setenforce permissive >> /dev/null 2>&1
 	systemctl restart nginx >> $LOGFILE
 	killSpin
 }
@@ -902,8 +905,8 @@ writeConfFiles()
 #  Download all dependencies from composer and NPM and setup application
 setupApplication()
 {
-	printf 'Creating Tech Bench Application (this may take some time) '
-	# startSpin
+	printf '\nCreating Tech Bench Application (this may take some time) \n\n'
+	startSpin
 	#  If the installer is not being done manually, create the database and database user
 	if [ $MANUAL == 'false' ]; then
 		mysql <<SCRIPT
@@ -916,53 +919,50 @@ SCRIPT
 	fi
 
 	#  Install composer dependencies
+	echo '     Downloading additional data files'
 	cd $WEBROOT
-	composer install --no-dev --no-interaction --optimize-autoloader --quite >> $LOGFILE
-	php artisan key:generate --force >> $LOGFILE
-	php artisan storage:link >> $LOGFILE
-	php artisan ziggy:generate >> $LOGFILE
+	composer install --no-dev --no-interaction --optimize-autoloader >> $LOGFILE 2>&1
+	php artisan key:generate --force >> $LOGFILE 2>&1
+	php artisan storage:link >> $LOGFILE 2>&1
+	php artisan ziggy:generate >> $LOGFILE 2>&1
 
 	#  Install NPM dependencies
-	# su -c "npm install --silent cross-env" $SUDO_USER &>> $LOGFILE
-	npm install --silent cross-env >> $LOGFILE
-	npm install --silent --only=production cross-env >> $LOGFILE
-	npm run production >> $LOGFILE
+	echo '     Building Website'
+	npm install --silent cross-env >> $LOGFILE 2>&1
+	npm install --silent --only=production cross-env >> $LOGFILE 2>&1
+	npm run production >> $LOGFILE 2>&1
 
 	#  Setup DATABASE
-	php artisan migrate --force >> $LOGFILE
+	echo '     Building Database'
+	php artisan migrate --force >> $LOGFILE 2>&1
 
 	#  Cache Files
-	php artisan config:cache >> $LOGFILE
-	php artisan route:cache >> $LOGFILE
-
-
-
-exit 0
-
+	php artisan config:cache >> $LOGFILE 2>&1
+	php artisan route:cache >> $LOGFILE 2>&1
 
 	# Setup Supervisor service to work email queue
 	touch $WORKERFILE
-	echo "#  The laravel-worker program will ensure the queue:work command " >> $WORKERFILE
+	echo "#  The tech-bench-worker program will ensure the queue:work command " > $WORKERFILE
 	echo "#  is constantly running." >> $WORKERFILE
 	echo "" >> $WORKERFILE
-	echo "[program:laravel-worker]" >> $WORKERFILE
+	echo "[program:tech-bench-worker]" >> $WORKERFILE
 	echo "process_name=%(program_name)s_%(process_num)02d" >> $WORKERFILE
 	echo "command=php $WEBROOT/artisan queue:work --sleep=3 --tries=3" >> $WORKERFILE
 	echo "autostart=true" >> $WORKERFILE
 	echo "autorestart=true" >> $WORKERFILE
-	echo "user=www-data" >> $WORKERFILE
+	echo "user=nginx" >> $WORKERFILE
 	echo "numprocs=8" >> $WORKERFILE
 	echo "redirect_stderr=true" >> $WORKERFILE
 	echo "stdout_logfile=$WEBROOT/storage/logs/worker.log" >> $WORKERFILE
 
 	# Start the Supervisor service
-	supervisorctl reread # >> $LOGFILE
-	supervisorctl update # >> $LOGFILE
-	supervisorctl start laravel-worker:* # >> $LOGFILE
+	supervisorctl reread >> $LOGFILE
+	supervisorctl update >> $LOGFILE
+	supervisorctl start tech-bench-worker:* >> $LOGFILE
 
 	# Setup the cron file for all Scheduled Tasks performed by the Tech Bench
 	touch $CRONFILE
-	echo "#  The laravel-jobs cron job is to run any scheduled tasks performed by the Tech Bench" >> $CRONFILE
+	echo "#  The tech-bench-jobs cron job is to run any scheduled tasks performed by the Tech Bench" >> $CRONFILE
 	echo "" >> $CRONFILE
 	echo "* * * * * cd $WEBROOT && php artisan schedule:run >> /dev/null 2>&1" >> $CRONFILE
 
@@ -975,7 +975,7 @@ cleanup()
 	startSpin
 
 	#  Set file permissions and owner
-	chown -R apache:apache $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
+	chown -R nginx:nginx $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
 	find $WEBROOT -type f -exec chmod 644 {} \; >> $LOGFILE
 	find $WEBROOT -type d -exec chmod 755 {} \; >> $LOGFILE
 

@@ -42,6 +42,21 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+#  Determine if SELinux is enabled or not
+OHCRAP=$(getenforce)
+if [ $OHCRAP != 'Disabled' ]; then
+	echo 'SELinux is currently enabled on your server. '
+	echo 'In order for the Tech Bench to work properly, you will need to '
+	echo 'either disable SELinux, or manually create exceptions.'
+
+	read -p 'Would yo ulike to continue? [Y/N]: ' CONT
+	if [ $CONT =~ [Yy]$ ]; then
+		echo 'Continuing...'
+	else
+		exit 0
+	fi
+fi
+
 #  Make temporary directory for holding tmp files
 mkdir $TBTMP
 cd $TBTMP
@@ -67,7 +82,7 @@ main()
 	printf 'Before we get started, lets gather some information from you'
 
 	#  Get the full URL of the Tech Bench site
-	printf '\n\nPlease enter the full url that will be used for the Tech Bench: \n'
+	printf '\n\nPlease enter the hostname that will be used for the Tech Bench: \n'
 	printf '(ex. techbench.domain.com)\n'
 	read -p "Enter URL [$WebURL]:  " WebURL2
 	echo ''
@@ -76,7 +91,7 @@ main()
 		WebURL=$WebURL2
 	fi
 	#  Determine if we should only use https access
-	read -p 'Use HTTPS for Tech Bench Access (Recommended) [y/n]: ' SSLOnly
+	read -p 'Use HTTPS for Tech Bench Access? (Recommended) [y/n]: ' SSLOnly
 	if [[ $SSLOnly =~ [Nn]$ ]]; then
 		SSLOnly=false
 	else
@@ -296,11 +311,17 @@ checkNginx()
         systemctl enable nginx >> $LOGFILE 2>&1
         systemctl start nginx >> $LOGFILE 2>&1
 
+		#  Create the default web directory if it does not exist
+		mkdir -p $WEBROOT
+
 		#  Open http and https services on internal firewall
 		firewall-cmd --permanent --zone=public --add-service=http >> /dev/null 2>&1
 		firewall-cmd --permanent --zone=public --add-service=https >> /dev/null 2>&1
 		firewall-cmd --reload >> /dev/null 2>&1
-		setenforce disabled >> /dev/null 2>&1
+
+		#  Create SELINUX exemptions for the web root directory
+		# semanage fcontext -a -t httpd_sys_rw_content_t "$WEBROOT(/.*)?" >> /dev/null 2>&1
+		# restorecon -Rv $WEBROOT >> /dev/null 2>&1
 
 		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'Nginx Installed' >> $LOGFILE 2>&1
@@ -395,7 +416,7 @@ checkModules()
 		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-dom -y >> $LOGFILE 2>&1
-		echo -ne '\b\b\b\bED]      \n'
+		echo -ne '\b\b\b\b\bED]      \n'
 		echo '[INSTALLED]' >> $LOGFILE 2>&1
 		killSpin
     else
@@ -417,7 +438,7 @@ checkModules()
 		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-zip -y >> $LOGFILE 2>&1
-		echo -ne '\b\b\b\bED]      \n'
+		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'PHP-ZIP Module Installed' >> $LOGFILE 2>&1
 		killSpin
     else
@@ -439,7 +460,7 @@ checkModules()
 		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-gd -y >> $LOGFILE 2>&1
-		echo -ne '\b\b\b\bED]      \n'
+		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'PHP-GD Module Installed' >> $LOGFILE 2>&1
 		killSpin
     else
@@ -461,7 +482,7 @@ checkModules()
 		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-pdo -y >> $LOGFILE 2>&1
-		echo -ne '\b\b\b\bED]      \n'
+		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'PHP-PDO Module Installed' >> $LOGFILE 2>&1
 		killSpin
     else
@@ -483,7 +504,7 @@ checkModules()
 		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-mbstring -y >> $LOGFILE 2>&1
-		echo -ne '\b\b\b\bED]      \n'
+		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'PHP-MBSTRING Module Installed' >> $LOGFILE 2>&1
 		killSpin
     else
@@ -505,7 +526,7 @@ checkModules()
 		echo -en '[INSTALLING] '
 		startSpin
 		yum -q install php-mysqlnd -y >> $LOGFILE 2>&1
-		echo -ne '\b\b\b\bED]      \n'
+		echo -ne '\b\b\b\b\bED]      \n'
 		echo 'PHP-MYSQLND Module Installed' >> $LOGFILE 2>&1
 		killSpin
     else
@@ -533,7 +554,7 @@ checkComposer()
 			yum -q install php-json -y >> $LOGFILE 2>&1
 			curl -s https://getcomposer.org/installer -o composer-installer.php >> $LOGFILE 2>&1
 			php composer-installer.php --install-dir=/usr/local/bin --filename=composer >> $LOGFILE 2>&1
-			echo -ne '\b\b\b\bED]      \n'
+			echo -ne '\b\b\b\b\bED]      \n'
 			echo 'Composer Installed' >> $LOGFILE 2>&1
 			killSpin
 		else
@@ -560,7 +581,7 @@ checkNodeJS()
 			echo -en '[INSTALLING] '
 			startSpin
 			yum -q install nodejs -y >> $LOGFILE 2>&1
-			echo -ne '\b\b\b\bED]      \n'
+			echo -ne '\b\b\b\b\bED]      \n'
 			echo 'NodeJS Installed' >> $LOGFILE 2>&1
 			killSpin
 		else
@@ -588,7 +609,7 @@ checkNPM()
 			startSpin
 			mkdir npm && cd npm/
 			curl -s https://www.npmjs.com/install.sh | sh  >> $LOGFILE 2>&1
-			echo -ne '\b\b\b\bED]      \n'
+			echo -ne '\b\b\b\b\bED]      \n'
 			echo 'NPM Installed' >> $LOGFILE 2>&1
 			killSpin
 		else
@@ -633,11 +654,11 @@ checkSupervisor()
 			startSpin
 			yum -q install epel-release -y >> $LOGFILE 2>&1
 			yum -q install supervisor -y >> $LOGFILE 2>&1
-			echo -ne '\b\b\b\bED]      \n\n'
+			echo -ne '\b\b\b\b\bED]      \n\n'
 			echo 'Supervisor Installed' >> $LOGFILE 2>&1
 
-			systemctl enable supervisord
-			systemctl start supervisord
+			systemctl enable supervisord >> $LOGFILE 2>&1
+			systemctl start supervisord >> $LOGFILE 2>&1
 
 			killSpin
 		else
@@ -661,7 +682,7 @@ checkPackage()
 	USEINDEX=null
 
 	if [ "$BRANCH" != 'null' ]; then
-		printf 'Downloading Branch '$BRANCH
+		printf 'Downloading Branch '$BRANCH' '
 		startSpin
 		USEFILE=Tech_Bench_$BRANCH.zip
 		RESPONSE=$(wget --server-response -O $USEFILE https://api.github.com/repos/butcherman/tech_bench/zipball/$BRANCH 2>&1 | awk '/^  HTTP/{print $2}')
@@ -675,7 +696,7 @@ checkPackage()
 		fi
 		killSpin
 	elif [ $LISTLEN == 0 ]; then
-		printf 'Downloading latest Tech Bench release'
+		printf 'Downloading latest Tech Bench release '
 		startSpin
 		USEFILE=Tech_Bench_latest.zip
 		GETURL=$(curl -s https://api.github.com/repos/butcherman/tech_bench/releases/latest | grep zipball_url | cut -d : -f 2,3 | tr -d \" | tr -d \,)
@@ -704,7 +725,7 @@ checkPackage()
 		USEFILE=${FILELIST[0]}
 	fi
 
-	printf 'Using '
+	printf '\nUsing '
 	tput setaf 2
 	printf $USEFILE
 	tput sgr0
@@ -717,7 +738,7 @@ installPackage()
 	mkdir -p $WEBROOT
 
 	#  Unzip installation files
-	printf 'Extracting Files'
+	printf 'Extracting Files '
 	startSpin
 	DIRNAME=$(zipinfo -1 $USEFILE | grep -o "^[^/]\+[/]" | sort -u | tr -d \/)
 	unzip -o $USEFILE >> $LOGFILE
@@ -740,7 +761,7 @@ installPackage()
 
 	#  If the installer is not being done manually, generate a password for the database user
 	if [ $MANUAL == 'false' ]; then
-		DBPass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+		DBPass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)
 		ROOTPass=$DBPASS
 	fi
 
@@ -757,8 +778,9 @@ installPackage()
 writeConfFiles()
 {
 	NGINXCONFIG=/etc/nginx/nginx.conf
+	SSLLOCATION=$WEBROOT/keystore/cert
 
-	printf '\nUpdating NGINX Config'
+	printf '\nUpdating NGINX Config '
 	startSpin
 
 	#  Move existing config to config.old
@@ -852,8 +874,8 @@ writeConfFiles()
 	echo ' 		' >> $NGINXCONFIG
 	echo ' 		charset utf-8;' >> $NGINXCONFIG
 	echo ' ' >> $NGINXCONFIG
-	echo ' 		ssl_certificate "'$WEBROOT'/keystore/cert/server.crt";' >> $NGINXCONFIG
-	echo ' 		ssl_certificate_key "'$WEBROOT'/keystore/cert/private/server.key";' >> $NGINXCONFIG
+	echo ' 		ssl_certificate "'$SSLLOCATION'/server.crt";' >> $NGINXCONFIG
+	echo ' 		ssl_certificate_key "'$SSLLOCATION'/private/server.key";' >> $NGINXCONFIG
 	echo ' 		ssl_session_cache shared:SSL:1m;' >> $NGINXCONFIG
 	echo ' 		ssl_session_timeout  10m;' >> $NGINXCONFIG
 	echo ' 		ssl_ciphers PROFILE=SYSTEM;' >> $NGINXCONFIG
@@ -893,9 +915,15 @@ writeConfFiles()
 	openssl x509 -req -days 36500 -in $TBTMP/server.csr -signkey $TBTMP/server.key -out $TBTMP/server.crt >> $LOGFILE 2>&1
 
 	#  Move the new certificate and key to the Tech Bench directory
-	mkdir -p $WEBROOT/keystore/cert/private >> $LOGFILE 2>&1
-	mv $TBTMP/server.crt $WEBROOT/keystore/cert/server.crt >> $LOGFILE 2>&1
-	mv $TBTMP/server.key $WEBROOT/keystore/cert/private/server.key >> $LOGFILE 2>&1
+	mkdir -p $SSLLOCATION/private>> $LOGFILE 2>&1
+	mv $TBTMP/server.crt $SSLLOCATION/server.crt >> $LOGFILE 2>&1
+	mv $TBTMP/server.key $SSLLOCATION/private/server.key >> $LOGFILE 2>&1
+
+	# /sbin/restorecon -v $SSLLOCATION/server.crt >> $LOGFILE
+	# /sbin/restorecon -v $SSLLOCATION/private/server.key >> $LOGFILE
+
+	# ausearch -c 'nginx' --raw | audit2allow -M my-nginx
+	# semodule -X 300 -i my-nginx.pp
 
 	#  Restart NGINX
 	systemctl restart nginx >> $LOGFILE
@@ -911,7 +939,8 @@ setupApplication()
 	if [ $MANUAL == 'false' ]; then
 		mysql <<SCRIPT
 			CREATE DATABASE IF NOT EXISTS \`$DBName\`;
-			CREATE USER IF NOT EXISTS $DBUser@localhost IDENTIFIED BY '$DBPass';
+			CREATE USER IF NOT EXISTS '$DBUser'@'localhost';
+			ALTER USER '$DBUser'@'localhost' IDENTIFIED BY '$DBPass';
 			GRANT ALL PRIVILEGES ON \`$DBName\`.* TO '$DBUser'@'localhost' WITH GRANT OPTION;
 			GRANT SELECT ON *.* TO '$DBUser'@'localhost';
 			FLUSH PRIVILEGES;
@@ -919,21 +948,21 @@ SCRIPT
 	fi
 
 	#  Install composer dependencies
-	echo '     Downloading additional data files'
+	printf '     Downloading additional data files '
 	cd $WEBROOT
-	composer install --no-dev --no-interaction --optimize-autoloader >> $LOGFILE 2>&1
+	composer install --no-dev --no-interaction --optimize-autoloader --no-ansi >> $LOGFILE 2>&1
 	php artisan key:generate --force >> $LOGFILE 2>&1
 	php artisan storage:link >> $LOGFILE 2>&1
 	php artisan ziggy:generate >> $LOGFILE 2>&1
 
 	#  Install NPM dependencies
-	echo '     Building Website'
+	printf '\n     Building Website '
 	npm install --silent cross-env >> $LOGFILE 2>&1
-	npm install --silent --only=production >> $LOGFILE 2>&1
+	npm install --only=production >> $LOGFILE 2>&1
 	npm run production >> $LOGFILE 2>&1
 
 	#  Setup DATABASE
-	echo '     Building Database'
+	printf '\n     Building Database '
 	php artisan migrate --force >> $LOGFILE 2>&1
 
 	#  Cache Files
@@ -978,18 +1007,18 @@ cleanup()
 	chown -R nginx:nginx $WEBROOT $WEBROOT/.env $WEBROOT/.htaccess
 	find $WEBROOT/ -type f -exec chmod 644 {} \; >> $LOGFILE
 	find $WEBROOT/ -type d -exec chmod 755 {} \; >> $LOGFILE
-	chmod -R $WEBROOT/storage 777 >> $LOGFILE
+	chmod -R  777 $WEBROOT/storage >> $LOGFILE
 
 	#  Lock down the config file and .htaccess
-	chmod 600 $WEBROOT/.env >> $LOGFILE
-	chmod 500 $WEBROOT/.htaccess >> $LOGFILE
-
-	#  Delete the files created by the installer
-	find $SCRIPTROOT/$USEFILE --delete >> $LOGFILE
-	find $TBTMP --delete >> $LOGFILE
+	chmod 644 $WEBROOT/.env >> $LOGFILE
+	chmod 544 $WEBROOT/.htaccess >> $LOGFILE
 
 	#  Move the installer log into the storage/logs directory
 	mv $LOGFILE $WEBROOT/storage/logs/Tech_Bench_Install.log
+
+	#  Delete the files created by the installer
+	rm -rf $SCRIPTROOT/$USEFILE >> $LOGFILE
+	rm -rf $TBTMP >> $LOGFILE
 
 	killSpin
 }
@@ -997,7 +1026,6 @@ cleanup()
 #  Spinner to show while background processes are running
 spin()
 {
-#	spinner="/|\\-/|\\-"
 	spinner="-\\|/-\\|/"
 	while :
 	do
@@ -1022,7 +1050,7 @@ killSpin()
 {
 	kill -9 $SPIN_PID > /dev/null 2>&1
 	wait $! > /dev/null 2>&1
-	echo -en "\b "
+	echo -en "\b  "
 }
 
 #  Check arguments

@@ -32,9 +32,9 @@ Note:  For security purposes, it is best practice to have the 'public' folder of
 * Be sure to copy the .htaccess files and .env.example files as well
 * Rename the .env.example to .env
 * Open the .env file and edit the following entries:
-  * APP_URL -> This entry should contain the full URL of the Tech Bench Application (example:  ```https://techbench.mycompany.com```)
-  * DB_DATABASE -> This entry should contain the name of the database to be used for the Tech Bench.  Note:  you must create this database
-  * DB_USERNAME -> The username that will be used by the tech bench to read and write to the database
+  * APP_URL= -> This entry should contain the full URL of the Tech Bench Application (example:  ```https://techbench.mycompany.com```)
+  * DB_DATABASE= -> This entry should contain the name of the database to be used for the Tech Bench.  Note:  you must create this database
+  * DB_USERNAME= -> The username that will be used by the tech bench to read and write to the database
 
     **Note:** This user must have full permissions to the database including 'GRANT.'  The user will also need select permissions from the 'information_schema' database as well
 

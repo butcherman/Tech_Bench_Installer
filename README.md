@@ -6,7 +6,7 @@ This repository is designed to hold scripts to assist in automating the Tech Ben
 
 The following requirements must be met in order for Tech Bench to install and run properly
 
-* Web application server (Apache currently supported)
+* Web application server (Currently tested on Apache and NGINX)
 * PHP 7.2 or higher
 * MySQL Database Server
 * Composer Dependency Manager

@@ -787,7 +787,7 @@ writeConfFiles()
 	mv $NGINXCONFIG $NGINXCONFIG.old
 
 	#  Write a new config
-	touch /etc/nginx/nginx.conf
+	touch $NGINXCONFIG
 	echo ' user nginx;' >> $NGINXCONFIG
 	echo ' worker_processes auto;' >> $NGINXCONFIG
 	echo ' error_log /var/log/nginx/error.log;' >> $NGINXCONFIG
@@ -821,11 +821,14 @@ writeConfFiles()
 	echo ' 		listen       80 default_server;' >> $NGINXCONFIG
 	echo ' 		listen       [::]:80 default_server;' >> $NGINXCONFIG
 	echo ' 		server_name  _;' >> $NGINXCONFIG
+	echo '' >> $NGINXCONFIG
 	if [ $SSLOnly == 'true' ]; then
-		echo '' >> $NGINXCONFIG
 		echo '		return 302 https://'$WebURL'$request_uri;' >> $NGINXCONFIG
 		echo '' >> $NGINXCONFIG
 	fi
+	echo '' >> $NGINXCONFIG
+	echo '	client_max_body_size 12M;' >> $NGINXCONFIG
+	echo '	client_body_buffer_size 16K;' >> $NGINXCONFIG
 	echo " 		root $WEBROOT/public;" >> $NGINXCONFIG
 	echo ' 		' >> $NGINXCONFIG
 	echo ' 		add_header X-Frame-Options "SAMEORIGIN";' >> $NGINXCONFIG
@@ -864,6 +867,10 @@ writeConfFiles()
 	echo ' 		listen       443 ssl http2 default_server;' >> $NGINXCONFIG
 	echo ' 		listen       [::]:443 ssl http2 default_server;' >> $NGINXCONFIG
 	echo ' 		server_name  _;' >> $NGINXCONFIG
+	echo '' >> $NGINXCONFIG
+	echo '		client_max_body_size 12M;' >> $NGINXCONFIG
+	echo '		client_body_buffer_size 16K;' >> $NGINXCONFIG
+	echo '' >> $NGINXCONFIG
 	echo " 		root         $WEBROOT/public;" >> $NGINXCONFIG
 	echo ' 		' >> $NGINXCONFIG
 	echo ' 		add_header X-Frame-Options "SAMEORIGIN";' >> $NGINXCONFIG

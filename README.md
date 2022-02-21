@@ -7,7 +7,7 @@ This repository is designed to hold scripts to assist in automating the Tech Ben
 The following requirements must be met in order for Tech Bench to install and run properly
 
 * Web application server (Currently tested on Apache and NGINX)
-* PHP 7.2 or higher
+* PHP 8.0 or higher
 * MySQL Database Server
 * Composer Dependency Manager
 * Node.js and Node Package Manager (NPM)
@@ -25,7 +25,7 @@ a
 
 It is the responsibility of the system administrator to install and maintain the operating system and web server with the latest updates and security patches.
 
-## Copyright © 2020 Butcherman
+## Copyright © 2022 Butcherman
 
 This program is free software:  you can redistribute it and/or modify it under the terms of the GNU
 General Public License as published by the Free Software Foundation, either version 2 of the License,

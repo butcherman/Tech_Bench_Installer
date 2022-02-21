@@ -12,7 +12,7 @@ Note:  For security purposes, it is best practice to have the 'public' folder of
 
 ## PHP Requirements
 
-* PHP 7.2 or higher
+* PHP 8.0 or higher
 * PHP-XML Module
 * PHP-DOM Module
 * PHP-ZIP Module

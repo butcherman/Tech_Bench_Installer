@@ -6,8 +6,8 @@
 ################################################################################
 
 #  Minimum PHP Version Required to run Tech Bench
-minimumPHPVer=72;
-minimumPHPReadable=7.2
+minimumPHPVer=80;
+minimumPHPReadable=8.0
 
 #  Variables
 PREREQ=true

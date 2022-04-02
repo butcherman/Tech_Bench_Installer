@@ -1,0 +1,10 @@
+FROM bitnami/nginx:latest
+
+ENV TB_URL=localhost
+ENV ENABLE_HTTPS=true
+
+COPY ./http.conf /opt/bitnami/nginx/conf/server_blocks/tech_bench_http.conf
+COPY ./https.conf /opt/bitnami/nginx/conf/server_blocks/tech_bench_https.conf
+COPY ./entrypoint.sh /scripts/
+
+ENTRYPOINT [ "/scripts/entrypoint.sh" ]

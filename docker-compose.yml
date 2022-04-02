@@ -1,0 +1,81 @@
+#################################################################################################################
+#                                                                                                               #
+#                                                                                                               #
+#                                      Tech Bench Docker Installation                                           #
+#         NOTE:  Modify .env file to change default passwords before executing `docker-compose up` command      #
+#                                                                                                               #
+#                                                                                                               #
+#################################################################################################################
+version: '3.8'
+networks:
+  app-tier:
+    driver: bridge
+volumes:
+  appData:
+services:
+
+#  TODO -
+#   Use non-root containers
+#   Cache all necessary items
+
+  #  Application Container
+  tech_bench:
+    container_name: tech_bench
+    restart: unless-stopped
+    image: tech_bench_app:latest
+    # build:
+    #   context: ./_testing
+    #   dockerfile: Dockerfile
+    volumes:
+      - appData:/app
+      - ./storageData/disks:/app/storage/app/
+      - ./storageData/backups:/app/storage/backups/
+      - ./storageData/logs:/app/storage/logs
+    environment:
+      - TB_URL=${TB_URL}
+      - ENABLE_HTTPS=${ENABLE_HTTPS}
+    networks:
+      - app-tier
+    depends_on:
+      - database
+      - redis
+
+  #  NGINX Web Server
+  nginx:
+    image: tech_bench_nginx:latest
+    container_name: nginx
+    restart: unless-stopped
+    volumes:
+      - appData:/app
+    environment:
+      - TB_URL=${TB_URL}
+      - ENABLE_HTTPS=${ENABLE_HTTPS}
+    ports:
+      - '80:80'
+      - '443:443'
+    networks:
+      - app-tier
+    depends_on:
+      - tech_bench
+
+  #  MySQL Database Container
+  database:
+    image: tech_bench_database:latest
+    container_name: database
+    restart: unless-stopped
+    volumes:
+      - ./appData/database:/bitnami/mysql/data
+    networks:
+      - app-tier
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+
+  #  Redis Container for Cache, Job and Email Queuing
+  redis:
+    image: tech_bench_redis:latest
+    container_name: redis
+    restart: unless-stopped
+    volumes:
+      - ./appData/redis:/bitnami/redis/data
+    networks:
+      - app-tier

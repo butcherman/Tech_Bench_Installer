@@ -31,3 +31,4 @@ RUN npm run production
 RUN find /app/ -type f -exec chmod 644 {} \;
 RUN find /app/ -type d -exec chmod 755 {} \;
 RUN chmod -R 777 /app/storage
+RUN chmod -R 777 /app/keystore

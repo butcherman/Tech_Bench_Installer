@@ -13,6 +13,10 @@ set -m
 echo "Starting Tech Bench"
 sleep 45    #  Pause to allow other containers to finish coming online
 
+#  TODO -
+#   *  Check to see if the Tech Bench App has been downloaded
+#   *  Check to see if staging version matches real version
+
 #  If the .env file does not exist, run the setup script to create the database and configuration
 if [ ! -f "/app/.env" ]
 then

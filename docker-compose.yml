@@ -17,6 +17,7 @@ services:
 #  TODO -
 #   Use non-root containers
 #   Cache all necessary items
+#   Finish Update script
 
   #  Application Container
   tech_bench:

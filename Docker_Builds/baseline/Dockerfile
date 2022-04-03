@@ -54,8 +54,4 @@ RUN composer self-update --2
 
 WORKDIR /app
 
-#  Install NodeJS and NPM
-RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && apt install -y nodejs
-RUN npm install -g npm@latest
-
 ENTRYPOINT [ "/scripts/entrypoint.sh" ]

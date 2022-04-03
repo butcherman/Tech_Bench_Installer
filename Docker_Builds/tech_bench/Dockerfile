@@ -4,12 +4,10 @@
 #                                                                                               #
 #################################################################################################
 
-FROM tech_bench_baseline
+FROM tech_bench_baseline:1.0
 
 ARG BRANCH=dev6         #  TODO - Change this back to false
 ARG VERSION=latest
-
-WORKDIR /tmp
 
 #  Make sure image is up to date
 RUN apt update && apt upgrade -y --no-install-recommends

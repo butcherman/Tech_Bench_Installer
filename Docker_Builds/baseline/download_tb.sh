@@ -35,6 +35,10 @@ cd $DIRNAME
 cp -R * /app/
 cp .env.example /app/.env.example
 
+#  Create a staging directory for future updates
+mkdir /staging
+cp -R * /staging/
+
 #  Make a Keystore directory for SSL Certificates
 mkdir /app/keystore
 chmod 777 /app/keystore         #  TODO - correct permissions

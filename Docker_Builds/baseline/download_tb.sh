@@ -41,7 +41,7 @@ cp -R * /staging/
 
 #  Make a Keystore directory for SSL Certificates
 mkdir /app/keystore
-chmod 777 /app/keystore         #  TODO - correct permissions
+chmod 777 /app/keystore
 
 #  Cleanup
 rm -rf /tmp/downloads/

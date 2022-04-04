@@ -23,10 +23,10 @@ services:
   tech_bench:
     container_name: tech_bench
     restart: unless-stopped
-    # image: tech_bench_app:latest
-    build:
-      context: ./_testing
-      dockerfile: Dockerfile
+    image: tech_bench_app:dev
+    # build:
+    #   context: ./_testing
+    #   dockerfile: Dockerfile
     volumes:
       - appData:/app
       - ./storageData/disks:/app/storage/app/

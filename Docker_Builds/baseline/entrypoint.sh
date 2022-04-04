@@ -52,8 +52,8 @@ then
     /scripts/setup.sh
 fi
 
-#  Check if the version file is available in the /app/config/ directory
-if [ -f "/app/config/version.yml" ]
+#  Check if the version file is available in the /staging/config/ directory
+if [ -f "/staging/config/version.yml" ]
 then
     #  Get staged version
     cd /staging

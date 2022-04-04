@@ -4,9 +4,9 @@
 #                                                                                               #
 #################################################################################################
 
-FROM tech_bench_baseline:1.0
+FROM butcherman/tech_bench_baseline:1.0
 
-ARG BRANCH=dev6         #  TODO - Change this back to false
+ARG BRANCH=false
 ARG VERSION=latest
 
 #  Make sure image is up to date

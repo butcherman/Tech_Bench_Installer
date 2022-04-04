@@ -30,5 +30,10 @@ php artisan key:generate --force
 #  Create symbolic link for public directory
 php artisan storage:link -q
 
-#  Run Update script to create database tables and cache
-sh /scripts/update.sh
+#  Create the database
+php /app/artisan migrate --force
+
+#  Cache configuration files
+# php /app/artisan config:cache
+php /app/artisan route:cache
+php /app/artisan view:cache

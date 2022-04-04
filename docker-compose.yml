@@ -23,10 +23,10 @@ services:
   tech_bench:
     container_name: tech_bench
     restart: unless-stopped
-    image: tech_bench_app:latest
-    # build:
-    #   context: ./_testing
-    #   dockerfile: Dockerfile
+    # image: tech_bench_app:latest
+    build:
+      context: ./_testing
+      dockerfile: Dockerfile
     volumes:
       - appData:/app
       - ./storageData/disks:/app/storage/app/
@@ -43,7 +43,7 @@ services:
 
   #  NGINX Web Server
   nginx:
-    image: tech_bench_nginx:latest
+    image: butcherman/tech_bench_nginx:1.0
     container_name: nginx
     restart: unless-stopped
     volumes:
@@ -61,7 +61,7 @@ services:
 
   #  MySQL Database Container
   database:
-    image: tech_bench_database:latest
+    image: butcherman/tech_bench_database:1.0
     container_name: database
     restart: unless-stopped
     volumes:
@@ -73,7 +73,7 @@ services:
 
   #  Redis Container for Cache, Job and Email Queuing
   redis:
-    image: tech_bench_redis:latest
+    image: butcherman/tech_bench_redis:1.0
     container_name: redis
     restart: unless-stopped
     volumes:

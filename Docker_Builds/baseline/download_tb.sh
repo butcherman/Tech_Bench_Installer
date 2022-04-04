@@ -35,7 +35,7 @@ cd $DIRNAME
 cp -R * /app/
 cp .env.example /app/.env.example
 
-#  Create a staging directory for future updates
+#  Create the staging directory in case this image is being loaded to an existing instance
 mkdir /staging
 cp -R * /staging/
 

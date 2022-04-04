@@ -9,7 +9,8 @@ This repository is designed to hold Docker files to build the Tech Bench applica
 
 ## Requirements
 
-Tech Bench requires that Docker and Docker Compose are installed on the dedicated server for the application.
+Tech Bench requires that Docker and Docker Compose are installed on the dedicated server for the application.  For more information regarding installing and setting up Docker,
+refer to the Docker website:  <https://www.docker.com/get-started/>
 
 By default, Tech Bench is set to run only through HTTPS.  It is highly recommended to upload a valid SSL Certificate to the application.
 

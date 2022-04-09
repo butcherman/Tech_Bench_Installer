@@ -14,19 +14,11 @@ volumes:
   appData:
 services:
 
-#  TODO -
-#   Use non-root containers
-#   Cache all necessary items
-#   Finish Update script
-
   #  Application Container
   tech_bench:
     container_name: tech_bench
     restart: unless-stopped
-    image: tech_bench_app:dev
-    # build:
-    #   context: ./_testing
-    #   dockerfile: Dockerfile
+    image: butcherman/tech_bench_app:latest
     volumes:
       - appData:/app
       - ./storageData/disks:/app/storage/app/

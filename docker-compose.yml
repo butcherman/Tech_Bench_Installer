@@ -24,6 +24,7 @@ services:
       - ./storageData/disks:/app/storage/app/
       - ./storageData/backups:/app/storage/backups/
       - ./storageData/logs:/app/storage/logs
+      - ./storageData/keystore:/app/keystore
     environment:
       - TB_URL=${TB_URL}
       - ENABLE_HTTPS=${ENABLE_HTTPS}

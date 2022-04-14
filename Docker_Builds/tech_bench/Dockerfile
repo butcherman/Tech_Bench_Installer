@@ -32,6 +32,10 @@ RUN find /app/ -type d -exec chmod 755 {} \;
 RUN chmod -R 777 /app/storage
 RUN chmod -R 777 /app/keystore
 
+#  Copy everything from this /app directory to the /staging directory
+#  This is done in case the user installs a newer Docker Image in to an existing volume
+RUN cp /app/* -R /staging/
+
 USER tbuser
 
 WORKDIR /app

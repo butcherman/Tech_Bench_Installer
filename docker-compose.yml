@@ -41,6 +41,8 @@ services:
     restart: unless-stopped
     volumes:
       - appData:/app
+      - ./storageData/keystore:/app/keystore
+      - ./storageData/disks/public:/app/public/storage
     environment:
       - TB_URL=${TB_URL}
       - ENABLE_HTTPS=${ENABLE_HTTPS}

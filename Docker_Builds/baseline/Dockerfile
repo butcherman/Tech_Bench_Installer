@@ -43,7 +43,7 @@ RUN apt install -yq php-dom \
 
 #  Copy over Supervisor config files
 COPY worker.conf /etc/supervisor/conf.d/worker.conf
-COPY supervisord.conf /etc/supervisor/supervisord.confcc
+COPY supervisord.conf /etc/supervisor/supervisord.conf
 
 #  Install and update NodeJS and NPM
 RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && apt install -y nodejs

@@ -35,5 +35,6 @@ php /app/artisan migrate --force
 
 #  Cache configuration files
 # php /app/artisan config:cache
+php /app/artisan breadcrumbs:cache
 php /app/artisan route:cache
 php /app/artisan view:cache

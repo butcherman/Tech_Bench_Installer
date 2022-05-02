@@ -45,6 +45,9 @@ RUN apt install -yq php-dom \
 COPY worker.conf /etc/supervisor/conf.d/worker.conf
 COPY supervisord.conf /etc/supervisor/supervisord.conf
 
+#  Set the permission of the supervisor log file to allow logging
+RUN chmod 777 -R /var/log/supervisor
+
 #  Install and update NodeJS and NPM
 RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && apt install -y nodejs
 RUN npm install -g npm@latest

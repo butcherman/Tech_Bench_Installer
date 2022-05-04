@@ -48,6 +48,20 @@ Password: password
 
 You will be forced to change this password on the first login.
 
+##  Upgrading Tech Bench
+
+Updating the Tech Bench is as simple as replacing the Docker image with the latest image.  Run the following commands to perform the update:
+
+```bash
+docker pull butcherman/tech_bench_app:latest
+docker-compose down
+docker-compose up -d
+```
+
+Once the new image is booted, the system will automatically see the updated software and apply it.
+
+Note:  The boot processes takes longer during an update.
+
 ## Troubleshooting
 
 ### .env Permissions Error

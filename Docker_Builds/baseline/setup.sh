@@ -25,15 +25,16 @@ fi
 
 #  Create Encryption Key
 echo "Creating Encryption Key"
-php artisan key:generate --force
+php /app/artisan key:generate --force
 
 #  Create symbolic link for public directory
-php artisan storage:link -q
+php /app/artisan storage:link -q
 
 #  Create the database
 php /app/artisan migrate --force
 
 #  Cache configuration files
 # php /app/artisan config:cache
+php /app/artisan breadcrumbs:cache
 php /app/artisan route:cache
 php /app/artisan view:cache

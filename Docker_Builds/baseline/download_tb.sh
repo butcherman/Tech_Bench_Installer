@@ -35,13 +35,14 @@ cd $DIRNAME
 cp -R * /app/
 cp .env.example /app/.env.example
 
-#  Create the staging directory in case this image is being loaded to an existing instance
+#  Copy everything from this /app directory to the /staging directory
+#  This is done in case the user installs a newer Docker Image in to an existing volume
 mkdir /staging
-cp -R * /staging/
+cp /app/* -R /staging/
 
 #  Make a Keystore directory for SSL Certificates
 mkdir /app/keystore
 chmod 777 /app/keystore
 
-#  Cleanup
+# #  Cleanup
 rm -rf /tmp/downloads/

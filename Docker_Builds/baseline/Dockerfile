@@ -27,26 +27,21 @@ COPY ./scheduler.sh /scripts/
 RUN apt update && apt upgrade -y --no-install-recommends
 
 #  Install php modules
-RUN apt install -yq php-dom \
-        php-zip \
+RUN apt install -yq php-common \
+        php-curl \
+        php-dom \
         php-gd \
-        php-pdo \
+        php-json \
         php-mbstring \
+        php-pdo \
         php-redis \
-        unzip \
-        zip \
+        php-xml \
+        php-zip \
         curl \
-        git \
         nano \
-        supervisor \
-        cron
-
-#  Copy over Supervisor config files
-COPY worker.conf /etc/supervisor/conf.d/worker.conf
-COPY supervisord.conf /etc/supervisor/supervisord.conf
-
-#  Set the permission of the supervisor log file to allow logging
-RUN chmod 777 -R /var/log/supervisor
+        openssl \
+        unzip \
+        zip
 
 #  Install and update NodeJS and NPM
 RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && apt install -y nodejs

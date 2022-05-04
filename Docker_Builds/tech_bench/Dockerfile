@@ -32,9 +32,11 @@ RUN find /app/ -type d -exec chmod 755 {} \;
 RUN chmod -R 777 /app/storage
 RUN chmod -R 777 /app/keystore
 
-#  Copy everything from this /app directory to the /staging directory
-#  This is done in case the user installs a newer Docker Image in to an existing volume
-RUN cp /app/* -R /staging/
+#  Set same directory permissions for staging directory
+RUN chown -R tbuser:tbgroup /staging
+RUN find /staging/ -type f -exec chmod 644 {} \;
+RUN find /staging/ -type d -exec chmod 755 {} \;
+RUN chmod -R 777 /staging/storage
 
 USER tbuser
 
@@ -44,3 +46,6 @@ WORKDIR /app
 RUN composer install --no-dev --no-interaction --optimize-autoloader
 RUN npm install                     #  TODO - Add ONLY PRODUCTION after reorganizing dev and prod needs
 RUN npm run production
+
+#  Place a version file in the staging directory to note what version this image is
+RUN echo $(php /app/artisan version --format=compact | sed -e 's/Tech Bench //g') > /staging/version

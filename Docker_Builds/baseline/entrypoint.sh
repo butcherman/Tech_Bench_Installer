@@ -44,38 +44,33 @@ vercomp () {
 set -m
 
 echo "Starting Tech Bench"
-sleep 45                        #  Pause to allow other containers to finish coming online
+
+#  During startup process, the MySQL container runs a self update command
+#  To allow this update to finish properly and not cause issues with TB Boot
+#  process, we will pause the TB startup process for 45 seconds
+sleep 45
 
 #  If the .env file does not exist, run the setup script to create the database and configuration
 if [ ! -f "/app/.env" ]
 then
     /scripts/setup.sh
-fi
-
 #  Check if the version file is available in the /staging/config/ directory
-if [ -f "/staging/config/version.yml" ]
+elif [ -f "/staging/version" ]
 then
-    #  Get staged version
-    cd /staging
-    composer install --no-dev --no-interaction --optimize-autoloader  --no-ansi >> /dev/null 2>&1
-    STAGED_VERSION=$(php artisan version --format=compact | sed -e 's/Tech Bench //g')
+    STAGED_VERSION=$(head -n 1 /staging/version)
+    APP_VERSION=$(php /app/artisan version --format=compact | sed -e 's/Tech Bench //g')
 
-    #  Get current version
-    cd /app
-    CURRENT_VERSION=$(php artisan version --format=compact | sed -e 's/Tech Bench //g')
-
-    vercomp $STAGED_VERSION $CURRENT_VERSION
+    vercomp $STAGED_VERSION $APP_VERSION
     NEED_UPDATE=$?
 
-    #  If the staged version of the app is newer than the used version, copy the files into the /app directory
-    if [ $NEED_UPDATE  == 1 ]
+    if [ $NEED_UPDATE == 1 ]
     then
         /scripts/update.sh
     fi
 fi
 
 #  Start the Horizon and PHP-FPM Services and run the Scheduler script
-/usr/bin/supervisord -c /etc/supervisor/supervisord.conf &
+php /app/artisan horizon &
 php-fpm -F --pid /opt/bitnami/php/tmp/php-fpm.pid -y /opt/bitnami/php/etc/php-fpm.conf &
 /scripts/scheduler.sh &&
 fg

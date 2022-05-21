@@ -41,7 +41,8 @@ RUN apt install -yq php-common \
         nano \
         openssl \
         unzip \
-        zip
+        zip \
+        mariadb-client
 
 #  Install and update NodeJS and NPM
 RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && apt install -y nodejs

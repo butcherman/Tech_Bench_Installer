@@ -44,7 +44,7 @@ WORKDIR /app
 
 #  Install dependencies
 RUN composer install --no-dev --no-interaction --optimize-autoloader
-RUN npm install                     #  TODO - Add ONLY PRODUCTION after reorganizing dev and prod needs
+RUN npm install --only-production
 RUN npm run production
 
 #  Place a version file in the staging directory to note what version this image is

@@ -11,6 +11,7 @@ FROM bitnami/php-fpm:8.1
 
 ENV TB_URL=localhost
 ENV ENABLE_HTTPS=true
+ENV SERVICE=master
 
 WORKDIR /tmp
 

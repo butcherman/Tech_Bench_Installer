@@ -45,32 +45,45 @@ set -m
 
 echo "Starting Tech Bench"
 
+if [ $SERVICE = "master" ] || [ $SERVICE = "app" ]
+then
+    #  If the .env file does not exist, run the setup script to create the database and configuration
+    if [ ! -f "/app/.env" ]
+    then
+        /scripts/setup.sh
+    #  Check if the version file is available in the /staging/config/ directory
+    elif [ -f "/staging/version" ]
+    then
+        STAGED_VERSION=$(head -n 1 /staging/version)
+        APP_VERSION=$(php /app/artisan version --format=compact | sed -e 's/Tech Bench //g')
+
+        vercomp $STAGED_VERSION $APP_VERSION
+        NEED_UPDATE=$?
+
+        if [ $NEED_UPDATE == 1 ]
+        then
+            /scripts/update.sh
+        fi
+    fi
+fi
+
 #  During startup process, the MySQL container runs a self update command
 #  To allow this update to finish properly and not cause issues with TB Boot
 #  process, we will pause the TB startup process for 45 seconds
 sleep 45
 
-#  If the .env file does not exist, run the setup script to create the database and configuration
-if [ ! -f "/app/.env" ]
+#  Start the Horizon and PHP-FPM Services and run the Scheduler script based on server purppose
+if [ $SERVICE = "app" ]
 then
-    /scripts/setup.sh
-#  Check if the version file is available in the /staging/config/ directory
-elif [ -f "/staging/version" ]
+     php-fpm -F --pid /opt/bitnami/php/tmp/php-fpm.pid -y /opt/bitnami/php/etc/php-fpm.conf
+elif [ $SERVICE = "horizon" ]
 then
-    STAGED_VERSION=$(head -n 1 /staging/version)
-    APP_VERSION=$(php /app/artisan version --format=compact | sed -e 's/Tech Bench //g')
-
-    vercomp $STAGED_VERSION $APP_VERSION
-    NEED_UPDATE=$?
-
-    if [ $NEED_UPDATE == 1 ]
-    then
-        /scripts/update.sh
-    fi
+    php /app/artisan horizon
+elif [ $SERVICE = "scheduler" ]
+then
+    /scripts/scheduler.sh
+else
+    php-fpm -F --pid /opt/bitnami/php/tmp/php-fpm.pid -y /opt/bitnami/php/etc/php-fpm.conf &
+    /scripts/scheduler.sh &&
+    fg
 fi
-
-#  Start the Horizon and PHP-FPM Services and run the Scheduler script
-php /app/artisan horizon &
-php-fpm -F --pid /opt/bitnami/php/tmp/php-fpm.pid -y /opt/bitnami/php/etc/php-fpm.conf &
-/scripts/scheduler.sh &&
-fg

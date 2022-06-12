@@ -28,6 +28,45 @@ services:
     environment:
       - TB_URL=${TB_URL}
       - ENABLE_HTTPS=${ENABLE_HTTPS}
+      - SERVICE=app
+    networks:
+      - app-tier
+    depends_on:
+      - database
+      - redis
+
+  #  Horizon Container
+  horizon:
+    container_name: horizon
+    restart: unless-stopped
+    image: butcherman/tech_bench_app:latest
+    volumes:
+      - appData:/app
+      - ./storageData/disks:/app/storage/app/
+      - ./storageData/backups:/app/storage/backups/
+      - ./storageData/logs:/app/storage/logs
+      - ./storageData/keystore:/app/keystore
+    environment:
+      - SERVICE=horizon
+    networks:
+      - app-tier
+    depends_on:
+      - database
+      - redis
+
+  #  Scheduler Container
+  scheduler:
+    container_name: scheduler
+    restart: unless-stopped
+    image: butcherman/tech_bench_app:latest
+    volumes:
+      - appData:/app
+      - ./storageData/disks:/app/storage/app/
+      - ./storageData/backups:/app/storage/backups/
+      - ./storageData/logs:/app/storage/logs
+      - ./storageData/keystore:/app/keystore
+    environment:
+      - SERVICE=scheduler
     networks:
       - app-tier
     depends_on:

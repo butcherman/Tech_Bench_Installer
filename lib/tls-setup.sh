@@ -4,6 +4,7 @@
 #
 
 TB_KEYSTORE_VOLUME="tech-bench_keystoreData"
+TB_COMPOSE_PROJECT_NAME="tech-bench"
 
 tb_copy_certificate_to_volume() {
     local source_dir="$1"
@@ -34,9 +35,9 @@ tb_write_letsencrypt_deploy_hook() {
     cat > "$hook" <<EOF
 #!/usr/bin/env bash
 set -Eeuo pipefail
-docker run --rm --user 0:0 \\
-    -v "tech-bench_keystoreData:/target" \\
-    -v "/etc/letsencrypt:/letsencrypt:ro" \\
+docker run --rm --user 0:0 \
+    -v "${TB_KEYSTORE_VOLUME}:/target" \
+    -v "/etc/letsencrypt:/letsencrypt:ro" \
     alpine:3.22 sh -ec '
         mkdir -p /target/private
         cp "/letsencrypt/live/${domain}/fullchain.pem" /target/server.crt
@@ -45,7 +46,7 @@ docker run --rm --user 0:0 \\
         chmod 640 /target/private/server.key
         chown 0:101 /target/private/server.key
     '
-docker compose --project-name tech-bench --project-directory "${install_dir}" \\
+docker compose --project-name "${TB_COMPOSE_PROJECT_NAME}" --project-directory "${install_dir}" \
     -f "${install_dir}/docker-compose.yml" restart nginx
 EOF
     chmod 0750 "$hook"
@@ -71,7 +72,7 @@ tb_configure_letsencrypt() {
     hook="/etc/letsencrypt/renewal-hooks/deploy/tech-bench-${domain}.sh"
     tb_write_letsencrypt_deploy_hook "$install_dir" "$domain"
 
-    printf -v compose_cmd 'docker compose --project-name tech-bench --project-directory %q -f %q' "$install_dir" "$install_dir/docker-compose.yml"
+    printf -v compose_cmd 'docker compose --project-name %q --project-directory %q -f %q' "$TB_COMPOSE_PROJECT_NAME" "$install_dir" "$install_dir/docker-compose.yml"
 
     tb_info "Requesting a Let's Encrypt certificate for $domain."
     tb_warn "Port 80 must be reachable from the public internet, and DNS must point to this server."
@@ -123,6 +124,10 @@ tb_configure_tls() {
     install_dir="$TB_INSTALL_DIR"
     env_file="$install_dir/.env"
     domain="$(tb_env_value BASE_URL "$env_file")"
+    TB_COMPOSE_PROJECT_NAME="$(tb_env_value COMPOSE_PROJECT_NAME "$env_file")"
+    TB_COMPOSE_PROJECT_NAME="${TB_COMPOSE_PROJECT_NAME:-tech-bench}"
+    [[ "$TB_COMPOSE_PROJECT_NAME" =~ ^[a-z0-9_-]+$ ]] || tb_die "Invalid COMPOSE_PROJECT_NAME in .env."
+    TB_KEYSTORE_VOLUME="${TB_COMPOSE_PROJECT_NAME}_keystoreData"
 
     [[ -n "$domain" ]] || tb_die "BASE_URL must be set before configuring HTTPS."
 

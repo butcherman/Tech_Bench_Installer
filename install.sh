@@ -19,6 +19,8 @@ source "${LIB_DIR}/docker-install.sh"
 source "${LIB_DIR}/install-config.sh"
 # shellcheck source=lib/tls-setup.sh
 source "${LIB_DIR}/tls-setup.sh"
+# shellcheck source=lib/deploy.sh
+source "${LIB_DIR}/deploy.sh"
 
 main() {
     tb_banner
@@ -30,9 +32,9 @@ main() {
     tb_ensure_docker
     tb_prepare_installation
     tb_configure_tls
+    tb_deploy_tech_bench
 
-    tb_info "System checks, Docker setup, initial configuration, and TLS setup completed successfully."
-    tb_info "Tech Bench containers will be deployed in the next installer stage."
+    tb_info "Tech Bench installation completed successfully."
 }
 
 main "$@"

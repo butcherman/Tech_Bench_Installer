@@ -59,8 +59,10 @@ tb_prepare_installation() {
         tb_die "The selected installation path exists and is not a directory: $install_dir"
     fi
 
-    mkdir -p "$install_dir"
-    chmod 750 "$install_dir"
+    if [[ ! -d "$install_dir" ]]; then
+        mkdir -p "$install_dir"
+        chmod 750 "$install_dir"
+    fi
 
     env_file="${install_dir}/.env"
     compose_file="${install_dir}/docker-compose.yml"

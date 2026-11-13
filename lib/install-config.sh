@@ -49,7 +49,7 @@ tb_prompt_value() {
 
 tb_prepare_installation() {
     local install_dir base_url app_version db_version sidecar_version
-    local env_file compose_file
+    local env_file compose_file value
 
     install_dir="$(tb_prompt_value "Installation directory" "/opt/tech-bench")"
     [[ "$install_dir" == /* ]] || tb_die "Installation directory must be an absolute path."
@@ -64,6 +64,9 @@ tb_prepare_installation() {
 
     env_file="${install_dir}/.env"
     compose_file="${install_dir}/docker-compose.yml"
+
+    [[ ! -L "$env_file" ]] || tb_die "Refusing to modify a symbolic-link environment file: $env_file"
+    [[ ! -L "$compose_file" ]] || tb_die "Refusing to replace a symbolic-link Compose file: $compose_file"
 
     if [[ ! -f "$compose_file" ]]; then
         install -m 0644 "${LIB_DIR}/../templates/docker-compose.yml" "$compose_file"

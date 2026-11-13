@@ -7,19 +7,21 @@ TB_KEYSTORE_VOLUME="tech-bench_keystoreData"
 
 tb_copy_certificate_to_volume() {
     local source_dir="$1"
+    local cert_file="$2"
+    local key_file="$3"
 
     docker volume create "$TB_KEYSTORE_VOLUME" >/dev/null
     docker run --rm --user 0:0 \
-        -v "\${TB_KEYSTORE_VOLUME}:/target" \
-        -v "\${source_dir}:/source:ro" \
-        alpine:3.22 sh -ec '
+        -v "$TB_KEYSTORE_VOLUME:/target" \
+        -v "$source_dir:/source:ro" \
+        alpine:3.22 sh -ec "
             mkdir -p /target/private
-            cp /source/server.crt /target/server.crt
-            cp /source/server.key /target/private/server.key
+            cp \"/source/$cert_file\" /target/server.crt
+            cp \"/source/$key_file\" /target/private/server.key
             chmod 644 /target/server.crt
             chmod 640 /target/private/server.key
             chown 0:101 /target/private/server.key
-        '
+        "
 }
 
 tb_write_letsencrypt_deploy_hook() {
@@ -69,7 +71,7 @@ tb_configure_letsencrypt() {
     hook="/etc/letsencrypt/renewal-hooks/deploy/tech-bench-\${domain}.sh"
     tb_write_letsencrypt_deploy_hook "$install_dir" "$domain"
 
-    compose_cmd="docker compose --project-name tech-bench --project-directory \\"\$install_dir\\" -f \\"\$install_dir/docker-compose.yml\\""
+    printf -v compose_cmd 'docker compose --project-name tech-bench --project-directory %q -f %q' "$install_dir" "$install_dir/docker-compose.yml"
 
     tb_info "Requesting a Let's Encrypt certificate for $domain."
     tb_warn "Port 80 must be reachable from the public internet, and DNS must point to this server."
@@ -81,7 +83,7 @@ tb_configure_letsencrypt() {
 
     cert_dir="/etc/letsencrypt/live/$domain"
     [[ -s "$cert_dir/fullchain.pem" && -s "$cert_dir/privkey.pem" ]] || tb_die "Certbot did not create the expected certificate files."
-    tb_copy_certificate_to_volume "$cert_dir"
+    tb_copy_certificate_to_volume "/etc/letsencrypt" "live/$domain/fullchain.pem" "live/$domain/privkey.pem"
     tb_info "Let's Encrypt certificate installed. Certbot renewal hooks are configured."
 }
 
@@ -110,7 +112,7 @@ tb_configure_self_signed() {
         -subj "/CN=$domain" \
         -addext "subjectAltName=$san"
 
-    tb_copy_certificate_to_volume "$temp_dir"
+    tb_copy_certificate_to_volume "$temp_dir" "server.crt" "server.key"
     rm -rf "$temp_dir"
     tb_info "Self-signed certificate installed. Browsers and clients will need to trust it manually."
 }

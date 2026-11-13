@@ -86,6 +86,12 @@ tb_configure_letsencrypt() {
     cert_dir="/etc/letsencrypt/live/$domain"
     [[ -s "$cert_dir/fullchain.pem" && -s "$cert_dir/privkey.pem" ]] || tb_die "Certbot did not create the expected certificate files."
     tb_copy_certificate_to_volume "/etc/letsencrypt" "live/$domain/fullchain.pem" "live/$domain/privkey.pem"
+    if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files certbot.timer >/dev/null 2>&1; then
+        systemctl enable --now certbot.timer
+    else
+        tb_warn "Certbot timer was not found; automatic renewal may need to be enabled manually."
+    fi
+
     tb_info "Let's Encrypt certificate installed. Certbot renewal hooks are configured."
 }
 

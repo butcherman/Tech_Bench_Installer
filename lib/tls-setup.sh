@@ -27,7 +27,7 @@ tb_copy_certificate_to_volume() {
 tb_write_letsencrypt_deploy_hook() {
     local install_dir="$1"
     local domain="$2"
-    local hook="/etc/letsencrypt/renewal-hooks/deploy/tech-bench-\${domain}.sh"
+    local hook="/etc/letsencrypt/renewal-hooks/deploy/tech-bench-${domain}.sh"
 
     install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
 
@@ -39,14 +39,14 @@ docker run --rm --user 0:0 \\
     -v "/etc/letsencrypt:/letsencrypt:ro" \\
     alpine:3.22 sh -ec '
         mkdir -p /target/private
-        cp "/letsencrypt/live/\${domain}/fullchain.pem" /target/server.crt
-        cp "/letsencrypt/live/\${domain}/privkey.pem" /target/private/server.key
+        cp "/letsencrypt/live/${domain}/fullchain.pem" /target/server.crt
+        cp "/letsencrypt/live/${domain}/privkey.pem" /target/private/server.key
         chmod 644 /target/server.crt
         chmod 640 /target/private/server.key
         chown 0:101 /target/private/server.key
     '
-docker compose --project-name tech-bench --project-directory "\${install_dir}" \\
-    -f "\${install_dir}/docker-compose.yml" restart nginx
+docker compose --project-name tech-bench --project-directory "${install_dir}" \\
+    -f "${install_dir}/docker-compose.yml" restart nginx
 EOF
     chmod 0750 "$hook"
 }
@@ -68,7 +68,7 @@ tb_configure_letsencrypt() {
         apt-get install -y certbot
     fi
 
-    hook="/etc/letsencrypt/renewal-hooks/deploy/tech-bench-\${domain}.sh"
+    hook="/etc/letsencrypt/renewal-hooks/deploy/tech-bench-${domain}.sh"
     tb_write_letsencrypt_deploy_hook "$install_dir" "$domain"
 
     printf -v compose_cmd 'docker compose --project-name tech-bench --project-directory %q -f %q' "$install_dir" "$install_dir/docker-compose.yml"

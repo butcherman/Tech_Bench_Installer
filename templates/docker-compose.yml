@@ -1,0 +1,274 @@
+################################################################################
+#                                                                              #
+#                                                                              #
+#                          Tech Bench Docker Installation                      #
+#           NOTE:  Check .env file for necessary fields to modify to           #
+#                        secure this Tech Bench installation                   #
+#                                                                              #
+#                                                                              #
+################################################################################
+
+networks:
+    app-tier:
+        driver: bridge
+
+volumes:
+    appData:
+    dbData:
+    keystoreData:
+    meilisearchData:
+    redisData:
+    storageData:
+    sidecarData:
+
+services:
+
+    # --------------------------------------------------------------------------
+    # Tech Bench Application / PHP-FPM
+    # --------------------------------------------------------------------------
+
+    tech_bench:
+        container_name: tech_bench
+        restart: unless-stopped
+        image: butcherman/tech_bench_app:${APP_VERSION}
+        volumes:
+            - storageData:/app/storage
+            - keystoreData:/app/keystore
+            - ./.env:/app/.env
+        environment:
+            - SERVICE=app
+            - TB_URL=${BASE_URL}
+        networks:
+            - app-tier
+        depends_on:
+            database:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            meilisearch:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "php", "artisan", "health:check"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 20s
+
+    # --------------------------------------------------------------------------
+    # NGINX Web Server
+    # --------------------------------------------------------------------------
+
+    nginx:
+        container_name: nginx
+        restart: unless-stopped
+        image: butcherman/tech_bench_nginx:${APP_VERSION}
+        volumes:
+            - storageData:/app/storage:ro
+            - keystoreData:/app/keystore
+        environment:
+            - TB_URL=${BASE_URL}
+        ports:
+            - "80:80"
+            - "443:443"
+        networks:
+            - app-tier
+        depends_on:
+            tech_bench:
+                condition: service_healthy
+            reverb:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "curl", "-kfsS", "-o", "/dev/null", "https://127.0.0.1/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 20s
+
+    # --------------------------------------------------------------------------
+    # Laravel Reverb
+    # --------------------------------------------------------------------------
+
+    reverb:
+        container_name: reverb
+        restart: unless-stopped
+        image: butcherman/tech_bench_app:${APP_VERSION}
+        volumes:
+            - storageData:/app/storage
+            - keystoreData:/app/keystore
+            - ./.env:/app/.env
+        environment:
+            - SERVICE=reverb
+            - TB_URL=${BASE_URL}
+        networks:
+            - app-tier
+        depends_on:
+            tech_bench:
+                condition: service_healthy
+        healthcheck:
+            test:
+                - CMD
+                - php
+                - -r
+                - '$$s=@fsockopen("127.0.0.1",8080); if($$s){fclose($$s);exit(0);} exit(1);'
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 20s
+
+    # --------------------------------------------------------------------------
+    # Laravel Horizon
+    # --------------------------------------------------------------------------
+
+    horizon:
+        container_name: horizon
+        restart: unless-stopped
+        image: butcherman/tech_bench_app:${APP_VERSION}
+        volumes:
+            - storageData:/app/storage
+            - keystoreData:/app/keystore
+            - ./.env:/app/.env
+        environment:
+            - SERVICE=horizon
+            - TB_URL=${BASE_URL}
+        networks:
+            - app-tier
+        depends_on:
+            tech_bench:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "php", "artisan", "horizon:status"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 30s
+
+    # --------------------------------------------------------------------------
+    # Laravel Scheduler
+    # --------------------------------------------------------------------------
+
+    scheduler:
+        container_name: scheduler
+        restart: unless-stopped
+        image: butcherman/tech_bench_app:${APP_VERSION}
+        volumes:
+            - storageData:/app/storage
+            - keystoreData:/app/keystore
+            - ./.env:/app/.env
+        environment:
+            - SERVICE=scheduler
+            - TB_URL=${BASE_URL}
+        networks:
+            - app-tier
+        depends_on:
+            tech_bench:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        healthcheck:
+            test:
+                - CMD
+                - php
+                - -r
+                - 'foreach (glob("/proc/[0-9]*/cmdline") as $$f) { $$c = str_replace("\0", " ", @file_get_contents($$f) ?: ""); if (str_contains($$c, "artisan schedule:work")) exit(0); } exit(1);'
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 30s
+
+    # --------------------------------------------------------------------------
+    # MySQL Database
+    # --------------------------------------------------------------------------
+
+    database:
+        container_name: database
+        restart: unless-stopped
+        image: butcherman/tech_bench_database:${DB_VERSION}
+        environment:
+            - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+        volumes:
+            - dbData:/var/lib/mysql
+        networks:
+            - app-tier
+
+    # --------------------------------------------------------------------------
+    # Redis
+    # --------------------------------------------------------------------------
+
+    redis:
+        container_name: redis
+        restart: unless-stopped
+        image: redis:8.10.2
+        command:
+            - sh
+            - -c
+            - 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"'
+        environment:
+            REDIS_PASSWORD: ${REDIS_PASSWORD}
+        volumes:
+            - redisData:/data
+        networks:
+            - app-tier
+        healthcheck:
+            test: ["CMD-SHELL", 'redis-cli -a "$${REDIS_PASSWORD}" ping 2>/dev/null | grep -q PONG']
+            interval: 15s
+            timeout: 5s
+            retries: 6
+
+    # --------------------------------------------------------------------------
+    # Meilisearch
+    # --------------------------------------------------------------------------
+
+    meilisearch:
+        container_name: meilisearch
+        restart: unless-stopped
+        image: getmeili/meilisearch:v1.49.0
+        environment:
+            - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
+        volumes:
+            - meilisearchData:/meili_data
+        networks:
+            - app-tier
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+            interval: 30s
+            timeout: 30s
+            retries: 6
+            start_period: 5s
+
+    # --------------------------------------------------------------------------
+    # Docker Management Container
+    # --------------------------------------------------------------------------
+    dockerManager:
+        image: butcherman/docker-sidecar:${SIDECAR_VERSION}
+        container_name: dockerManager
+        restart: unless-stopped
+        stop_signal: SIGTERM
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - sidecarData:/var/lib/docker-sidecar
+        networks:
+            - app-tier
+
+    # --------------------------------------------------------------------------
+    # Docker Worker Container
+    # --------------------------------------------------------------------------
+    dockerManagerWorker:
+        image: butcherman/docker-sidecar:${SIDECAR_VERSION}
+        container_name: dockerManagerWorker
+        restart: unless-stopped
+        stop_signal: SIGTERM
+        stop_grace_period: 3700s
+        command:
+            - sh
+            - -c
+            - php artisan docker-manager:recover && exec php artisan queue:work redis --queue=docker-updates --sleep=3 --tries=1 --timeout=3600
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - sidecarData:/var/lib/docker-sidecar
+        networks:
+            - app-tier
+        depends_on:
+            redis:
+                condition: service_healthy

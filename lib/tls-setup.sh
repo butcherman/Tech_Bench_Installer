@@ -59,6 +59,7 @@ tb_configure_letsencrypt() {
 
     [[ "$domain" != *.* ]] && tb_die "Let's Encrypt requires a fully qualified domain name."
     [[ "$domain" =~ ^[A-Za-z0-9.-]+$ ]] || tb_die "The domain name contains unsupported characters."
+    [[ ! "$domain" =~ ^[0-9.]+$ ]] || tb_die "Let's Encrypt certificates require a DNS hostname, not an IP address."
 
     email="$(tb_prompt_value "Email address for Let's Encrypt expiry notices" "")"
     [[ "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || tb_die "A valid email address is required for Let's Encrypt."
@@ -119,7 +120,7 @@ tb_configure_self_signed() {
 }
 
 tb_configure_tls() {
-    local env_file domain install_dir choice
+    local env_file domain install_dir choice replace_cert
 
     install_dir="$TB_INSTALL_DIR"
     env_file="$install_dir/.env"
@@ -130,6 +131,16 @@ tb_configure_tls() {
     TB_KEYSTORE_VOLUME="${TB_COMPOSE_PROJECT_NAME}_keystoreData"
 
     [[ -n "$domain" ]] || tb_die "BASE_URL must be set before configuring HTTPS."
+
+    if docker volume inspect "$TB_KEYSTORE_VOLUME" >/dev/null 2>&1; then
+        if docker run --rm -v "$TB_KEYSTORE_VOLUME:/target:ro" alpine:3.22 sh -c 'test -s /target/server.crt && test -s /target/private/server.key' >/dev/null 2>&1; then
+            read -r -p "An existing TLS certificate was found. Replace it? [y/N]: " replace_cert
+            if [[ ! "$replace_cert" =~ ^[Yy]$ ]]; then
+                tb_info "Preserving the existing TLS certificate."
+                return 0
+            fi
+        fi
+    fi
 
     echo
     tb_info "Choose the HTTPS certificate type:"

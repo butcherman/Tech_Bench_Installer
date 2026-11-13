@@ -118,6 +118,7 @@ tb_prepare_installation() {
     tb_set_env_if_empty APP_VERSION "$app_version" "$env_file"
     tb_set_env_if_empty DB_VERSION "$db_version" "$env_file"
     tb_set_env_if_empty SIDECAR_VERSION "$sidecar_version" "$env_file"
+    tb_set_env_if_empty COMPOSE_PROJECT_NAME "tech-bench" "$env_file"
     tb_set_env_if_empty DB_ROOT_PASSWORD "$(tb_random_secret)" "$env_file"
     tb_set_env_if_empty REDIS_PASSWORD "$(tb_random_secret)" "$env_file"
     tb_set_env_if_empty MEILI_MASTER_KEY "$(tb_random_secret)" "$env_file"

@@ -13,6 +13,8 @@ LIB_DIR="${INSTALLER_DIR}/lib"
 source "${LIB_DIR}/common.sh"
 # shellcheck source=lib/system-checks.sh
 source "${LIB_DIR}/system-checks.sh"
+# shellcheck source=lib/docker-install.sh
+source "${LIB_DIR}/docker-install.sh"
 
 main() {
     tb_banner
@@ -21,9 +23,10 @@ main() {
     tb_check_architecture
     tb_check_required_commands
     tb_check_network
+    tb_ensure_docker
 
-    tb_info "Initial system checks passed."
-    tb_info "Docker installation and application deployment will be added in the next installer stages."
+    tb_info "System checks and Docker setup completed successfully."
+    tb_info "Tech Bench application deployment will be added in the next installer stage."
 }
 
 main "$@"
